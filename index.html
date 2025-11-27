@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>緊急地震速報 EEW Overlay</title>
+    <!-- Tailwind CSS (CDN) を読み込みます -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* OBSでの背景透過とフルスクリーン表示を確実にするためのスタイル */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent !important;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* アラートコンテナのスタイル */
+        #eew-container {
+            position: absolute; 
+            top: 20px; 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 800px;
+            pointer-events: none;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* 個々のアラート要素の基本スタイル */
+        .eew-alert {
+            display: block;
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            border: 4px solid white;
+            transition: all 0.3s ease-in-out;
+            animation: pulse-border 1s infinite alternate;
+            pointer-events: none;
+        }
+
+        /* 震度に応じて背景色を調整 */
+        .eew-alert.intensity-3-up {
+            background-color: #ff8c00; /* 震度3以上: オレンジ */
+        }
+        .eew-alert.intensity-5-up {
+            background-color: #ff4500; /* 震度5弱以上: 赤オレンジ */
+        }
+        .eew-alert.intensity-6-up {
+            background-color: #dc143c; /* 震度6弱以上: 濃い赤 */
+            animation: shake 0.5s infinite; 
+        }
+
+        /* アニメーションキーフレーム */
+        @keyframes pulse-border {
+            from { border-color: white; box-shadow: 0 0 10px #fff; }
+            to { border-color: yellow; box-shadow: 0 0 20px yellow; }
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px); }
+            20% { transform: translate(-1px, -2px); }
+            40% { transform: translate(-3px, 0px); }
+            60% { transform: translate(3px, 2px); }
+            80% { transform: translate(-1px, -1px); }
+            100% { transform: translate(1px, -2px); }
+        }
+
+        /* 震度表示のスタイル */
+        .intensity-label {
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .intensity-unit {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        /* ボタンのテキストを中央揃えにして改行を可能にする */
+        .test-button-label {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+
+        /* 折りたたみコンテンツのベーススタイル */
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            padding-top: 0;
+            padding-bottom: 0;
+            /* Flex gapを維持するため、子要素のマージンをリセット */
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem; /* gap-2に相当 */
+        }
+
+        .collapsible-content.expanded {
+            max-height: 1500px; /* URL入力欄が増えたため最大値を大きくする */
+            padding-top: 0.75rem; /* p-3に相当 */
+            padding-bottom: 0; /* 親要素のパディングに依存 */
+        }
+        
+        /* 統合されたトグルボタンのスタイル */
+        .toggle-header {
+             /* 親のパディングと競合しないようにマージンとパディングを調整 */
+             padding-top: 0.5rem;
+             padding-bottom: 0.5rem;
+             margin-top: -0.5rem; 
+             margin-left: -0.75rem; /* padding-left: p-3 (0.75rem)の調整 */
+             margin-right: -0.75rem; /* padding-right: p-3 (0.75rem)の調整 */
+             padding-left: 0.75rem;
+             padding-right: 0.75rem;
+             /* 境界線調整 */
+             border-top: 1px solid transparent; /* 内部のpb-1/mb-1と合わせて境界線を見せないようにする */
+             border-bottom: 1px solid;
+             
+        }
+        
+        /* ロードステータス用のクラス */
+        .loading-status {
+            font-size: 0.75rem; /* text-xs */
+            font-weight: 600; /* font-semibold */
+            padding-left: 0.25rem; /* pl-1 */
+        }
+        
+        /* ニューステロップ (Ticker) スタイル */
+        #quake-ticker-area {
+            position: fixed;
+            bottom: 20px; 
+            left: 0;
+            width: 100%;
+            background-color: rgba(179, 11, 11, 0.95); /* 赤系の背景 */
+            color: white;
+            overflow: hidden; 
+            z-index: 1500;
+            display: none; /* Initially hidden, JS will set to flex when needed */
+            align-items: center;
+            white-space: nowrap;
+            padding: 2px 0; 
+            
+            font-size: 34px; 
+            font-weight: 900; 
+            line-height: 1.4; /* 行間を調整 */
+            
+            /* 白エッジを上と下に追加 */
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.7); /* 白く光るシャドウ */
+            border-top: 4px solid rgb(255, 255, 255); /* 境界線も太くする */
+            border-bottom: 4px solid rgb(255, 255, 255); /* 下にも白い境界線を追加 */
+            
+            /* スクロール開始位置を右端にするためのパディング */
+            padding-left: 100%; 
+        }
+        
+        /* スクロールアニメーションを初期状態で一時停止 */
+        #ticker-content {
+            display: inline-block;
+            animation-name: ticker-scroll;
+            animation-timing-function: linear;
+            animation-iteration-count: 1; /* 1回のみ実行 */
+            animation-fill-mode: forwards; /* 終了時の状態を維持 (画面外で停止) */
+            animation-play-state: paused; /* 初期状態は停止 */
+            padding-right: 48px; /* テロップコンテンツの右側にもスペースを追加 */
+        }
+
+        /* スクロールアニメーションの定義 */
+        @keyframes ticker-scroll {
+            /* JSで設定された --scroll-distance 分だけ左に移動 */
+            to { transform: translateX(var(--scroll-distance, -100%)); } 
+        }
+        
+        /* ロード完了ステータス */
+        #load-status {
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            background-color: rgba(17, 94, 89, 0.9); /* teal-700 */
+            color: white;
+            border-radius: 6px;
+        }
+
+    </style>
+</head>
+<body>
+    
+    <!-- 緊急地震速報のオーバーレイ表示エリア -->
+    <div id="eew-display-area" class="relative w-full h-full pointer-events-none">
+        <!-- ロード完了ステータス用 -->
+        <p id="load-status" class="text-white text-center absolute top-2 right-2 z-20 transition-all">準備中...</p>
+
+        <!-- アラート要素を格納するコンテナ -->
+        <div id="eew-container">
+        </div>
+    </div>
+    
+    <!-- 🚨 地震情報テロップ表示エリア (画面下部固定) 🚨 -->
+    <div id="quake-ticker-area">
+        <div id="ticker-content"></div>
+    </div>
+    <!-- 地震情報テロップ表示エリア 終了 -->
+
+    <!-- 設定トグルボタン -->
+    <button id="toggle-settings" class="fixed top-1/2 left-0 -translate-y-1/2 bg-gray-900 bg-opacity-70 text-white p-2 rounded-r-lg shadow-xl z-[2001] pointer-events-auto transition hover:bg-gray-700 focus:outline-none">
+        設定 ▼
+    </button>
+
+    <!-- テスト用コントロールパネル -->
+    <div id="test-controls" class="w-[320px] h-full p-4 bg-gray-900 bg-opacity-95 fixed top-0 left-0 transform -translate-x-full transition-transform duration-300 z-[2000] overflow-y-auto" style="pointer-events: auto;">
+        
+        <h2 class="text-white text-xl font-bold mb-4 border-b border-gray-700 pb-2">EEW オーバーレイ設定 (Local Storage)</h2>
+
+        <!-- 1. 表示設定グループ -->
+        <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg mb-4">
+            <p class="text-sm font-semibold text-gray-300 w-full border-b border-gray-700 pb-1 mb-1">▶ 表示・アニメーション設定</p>
+            
+            <div class="flex items-center justify-between">
+                <!-- 修正箇所 -->
+                <label for="min-intensity" class="text-white text-sm font-medium whitespace-nowrap">EEW表示最低震度:</label>
+                <select id="min-intensity" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                    <!-- オプションはJavaScriptで設定 -->
+                </select>
+            </div>
+            <div class="flex items-center justify-between">
+                <label for="eew-duration" class="text-white text-sm font-medium whitespace-nowrap">EEWアラート時間(秒):</label>
+                <input type="number" id="eew-duration" min="5" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+            </div>
+            <div class="flex items-center justify-between">
+                <label for="quake-duration" class="text-white text-sm font-medium whitespace-nowrap">情報スクロール(秒):</label>
+                <input type="number" id="quake-duration" min="10" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+            </div>
+        </div>
+        
+        <!-- 2. 🚨 震度別アラーム音設定グループ 🚨 -->
+        <div class="flex flex-col bg-red-800 rounded-lg mb-4 border border-yellow-500 p-3">
+            <!-- ヘッダー (クリックで展開/折りたたみ) -->
+            <button id="toggle-intensity-alarm" class="toggle-header flex items-center w-full text-sm font-semibold text-yellow-300 border-yellow-700 hover:text-white transition">
+                <span id="intensity-alarm-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
+                <span>震度別アラーム音設定</span>
+            </button>
+            
+            <!-- 折りたたみ可能なコンテンツ -->
+            <div id="intensity-alarm-content" class="collapsible-content">
+                <!-- 共通のオプションリスト -->
+                <script>
+                    const soundOptions = `
+                        <option value="classic_eew">EEW標準音</option>
+                        <option value="urgent_siren">🚨 緊迫サイレン音</option>
+                        <option value="custom_tone_a">🎵 カスタムトーン A</option>
+                        <option value="custom_tone_b">🎶 カスタムトーン B</option>
+                        <option value="custom_url_a">🔊 URL音源 A</option>
+                        <option value="custom_url_b">🔊 URL音源 B</option>
+                        <option value="simple_beep">ピーン音 (660Hz)</option>
+                        <option value="silent">ミュート</option>
+                    `;
+                </script>
+
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">震度4以下用:</label>
+                    <select id="sound-for-int4" class="p-1 rounded text-sm w-36 bg-red-700 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">震度5弱 & 5強用:</label>
+                    <select id="sound-for-int5" class="p-1 rounded text-sm w-36 bg-red-700 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">震度6弱 から 7用:</label>
+                    <select id="sound-for-int6" class="p-1 rounded text-sm w-36 bg-red-700 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 🎵 カスタムアラーム音の設定グループ 🎶 -->
+        <div class="flex flex-col p-3 bg-gray-800 rounded-lg mb-4 border border-gray-600">
+            <!-- ヘッダー (クリックで展開/折りたたみ) - アイコンを統合 -->
+            <button id="toggle-custom-alarm" class="toggle-header flex items-center w-full text-sm font-semibold text-gray-300 border-gray-700 hover:text-white transition">
+                <span id="custom-alarm-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
+                <span>カスタムアラーム音のパラメータ設定</span>
+            </button>
+            
+            <!-- 折りたたみ可能なコンテンツ -->
+            <div id="custom-alarm-content" class="collapsible-content">
+                
+                <!-- カスタムトーン (シンセサイザー音) -->
+                <div class="flex flex-col gap-1 p-2 bg-gray-700 rounded-lg">
+                    <p class="text-sm font-bold text-yellow-400">🎵 カスタムトーン A (変調音)</p>
+                    <div class="flex justify-between items-center text-xs text-white">
+                        <label>ベース周波数 (Hz):</label>
+                        <input type="number" id="custom-a-baseFreq" min="100" max="2000" class="p-1 rounded w-16 bg-gray-600 text-white text-right">
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-white">
+                        <label>変調幅 (Hz):</label>
+                        <input type="number" id="custom-a-modFreq" min="0" max="1000" class="p-1 rounded w-16 bg-gray-600 text-white text-right">
+                    </div>
+                    <p class="text-sm font-bold text-yellow-400 mt-2">🎶 カスタムトーン B (テンポ/リピート)</p>
+                    <div class="flex justify-between items-center text-xs text-white">
+                        <label>テンポ (ms/音):</label>
+                        <input type="number" id="custom-b-tempoMs" min="50" max="1000" class="p-1 rounded w-16 bg-gray-600 text-white text-right">
+                    </div>
+                </div>
+
+                <!-- URL音源 A -->
+                <div class="flex flex-col gap-1 p-2 bg-gray-700 rounded-lg">
+                    <p class="text-sm font-bold text-green-400">🔊 URL音源 A (.mp3/.wavなど)</p>
+                    <input type="text" id="custom-url-a-input" placeholder="CORS対応の音声URL (mp3/wav)" class="p-1 rounded w-full bg-gray-600 text-white text-xs">
+                    <p id="custom-url-a-status" class="loading-status text-yellow-500">未設定</p>
+                </div>
+                
+                <!-- URL音源 B -->
+                <div class="flex flex-col gap-1 p-2 bg-gray-700 rounded-lg">
+                    <p class="text-sm font-bold text-green-400">🔊 URL音源 B (.mp3/.wavなど)</p>
+                    <input type="text" id="custom-url-b-input" placeholder="CORS対応の音声URL (mp3/wav)" class="p-1 rounded w-full bg-gray-600 text-white text-xs">
+                    <p id="custom-url-b-status" class="loading-status text-yellow-500">未設定</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. テストグループ -->
+        <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg">
+            <p class="text-sm font-semibold text-gray-300 w-full border-b border-gray-700 pb-1 mb-1">▶ テスト/ユーティリティ</p>
+            <div class="grid grid-cols-2 gap-2">
+                <!-- 続報テスト用グループA -->
+                <button id="test-eew-5weak-a" class="px-2 py-1 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition duration-150 text-sm shadow-md">
+                    <span class="test-button-label">震度5弱<br>（新規EEW）</span>
+                </button>
+                <button id="test-eew-6strong-a" class="px-2 py-1 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-800 transition duration-150 text-sm shadow-md">
+                    <span class="test-button-label">震度6強<br>（EEW続報）</span>
+                </button>
+                <button id="test-quake-3" class="px-2 py-1 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition duration-150 text-sm shadow-md">地震情報<br>テロップ</button>
+                <button id="test-sound" class="px-2 py-1 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-150 text-sm shadow-md">アラーム音<br>テスト</button>
+            </div>
+            <button id="clear-alert" class="w-full px-2 py-1 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-150 text-sm shadow-md mt-2">すべてのアラートを非表示</button>
+        </div>
+    </div>
+    <!-- テスト用コントロールパネル 終了 -->
+
+
+    <script>
+        // DOM要素の取得
+        const eewContainer = document.getElementById('eew-container');
+        const loadStatusEl = document.getElementById('load-status');
+        const minIntensitySelect = document.getElementById('min-intensity'); 
+        const eewDurationInput = document.getElementById('eew-duration');
+        const quakeDurationInput = document.getElementById('quake-duration'); 
+
+        // 🚨 テロップ関連 🚨
+        const quakeTickerArea = document.getElementById('quake-ticker-area');
+        const tickerContent = document.getElementById('ticker-content');
+
+        const toggleSettingsButton = document.getElementById('toggle-settings');
+        const testControls = document.getElementById('test-controls');
+        
+        // 🚨 震度別アラーム設定要素 🚨
+        const toggleIntensityAlarm = document.getElementById('toggle-intensity-alarm');
+        const intensityAlarmContent = document.getElementById('intensity-alarm-content');
+        const intensityAlarmIcon = document.getElementById('intensity-alarm-icon');
+        const soundForInt4El = document.getElementById('sound-for-int4');
+        const soundForInt5El = document.getElementById('sound-for-int5');
+        const soundForInt6El = document.getElementById('sound-for-int6');
+
+        // 🎵 カスタムアラーム設定要素 🎶
+        const customAlarmToggle = document.getElementById('toggle-custom-alarm');
+        const customAlarmContent = document.getElementById('custom-alarm-content');
+        const customAlarmIcon = document.getElementById('custom-alarm-icon'); 
+        
+        // カスタムトーン (シンセ音)
+        const customA_BaseFreq = document.getElementById('custom-a-baseFreq');
+        const customA_ModFreq = document.getElementById('custom-a-modFreq');
+        const customB_TempoMs = document.getElementById('custom-b-tempoMs');
+        
+        // カスタムURL音源
+        const customUrlAInput = document.getElementById('custom-url-a-input');
+        const customUrlAStatus = document.getElementById('custom-url-a-status');
+        const customUrlBInput = document.getElementById('custom-url-b-input');
+        const customUrlBStatus = document.getElementById('custom-url-b-status');
+
+
+        // テスト用ボタンの取得
+        const testEew5WeakA = document.getElementById('test-eew-5weak-a');
+        const testEew6StrongA = document.getElementById('test-eew-6strong-a');
+        const testQuake3Button = document.getElementById('test-quake-3');
+        const testSoundButton = document.getElementById('test-sound'); 
+        const clearAlertButton = document.getElementById('clear-alert');
+
+        // ----------------------------------------------------
+        // 🌟 永続化のための設定 🌟
+        // ----------------------------------------------------
+        const LOCAL_STORAGE_KEY = 'eewOverlaySettings';
+
+        const DEFAULT_SETTINGS = {
+            minIntensityScale: 50, // 震度5弱
+            eewDuration: 15,       // EEW表示時間 (秒)
+            quakeDuration: 20,     // 地震情報テロップのスクロール速度 (秒/画面幅)
+            
+            // 🚨 震度別アラーム音設定のデフォルト
+            eewSoundMap: {
+                int4_down: 'classic_eew',
+                int5_mid: 'urgent_siren', 
+                int6_up: 'urgent_siren'    
+            },
+            
+            // 🎵 カスタムトーンのデフォルトパラメータ 🎶
+            customTones: {
+                custom_a: {
+                    baseFreq: 880,  // Hz (基準周波数 - A)
+                    modFreq: 120,   // Hz (変調幅 - A)
+                },
+                custom_b: {
+                    baseFreq: 440,
+                    modFreq: 220,
+                    tempoMs: 300,   // ms (1音の長さ - Bがテンポを代表)
+                    repeats: 3      // 回 (繰り返し回数 - Bがリピートを代表)
+                }
+            },
+            // 🔊 カスタムURL音源 🔊
+            customUrls: {
+                custom_url_a: '',
+                custom_url_b: '',
+            },
+            
+            // UIの折りたたみ状態のデフォルト
+            uiState: {
+                isIntensityAlarmExpanded: false,
+                isCustomAlarmExpanded: false
+            }
+        };
+
+        // 実行中の設定値
+        let CURRENT_SETTINGS = {...DEFAULT_SETTINGS}; 
+        
+        // ----------------------------------------------------
+        // 💾 設定の保存とロード機能 (LocalStorage) 💾
+        // ----------------------------------------------------
+        
+        /**
+         * 現在の設定をブラウザのLocalStorageに保存する
+         * @param {Object} newSettings - 更新する設定の一部または全部
+         */
+        function saveSettings(newSettings) {
+            
+            // 現在の設定をディープマージ
+            const mergedSettings = { 
+                ...CURRENT_SETTINGS,
+                ...newSettings,
+                eewSoundMap: {
+                    ...CURRENT_SETTINGS.eewSoundMap,
+                    ...(newSettings.eewSoundMap || {})
+                },
+                customTones: {
+                    ...CURRENT_SETTINGS.customTones,
+                    ...(newSettings.customTones || {})
+                },
+                customUrls: {
+                    ...CURRENT_SETTINGS.customUrls,
+                    ...(newSettings.customUrls || {})
+                },
+                uiState: {
+                    ...CURRENT_SETTINGS.uiState,
+                    ...(newSettings.uiState || {})
+                }
+            };
+            
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mergedSettings));
+                CURRENT_SETTINGS = mergedSettings; // 実行中の設定を更新
+                console.log('設定をLocalStorageに保存しました。');
+            } catch (e) {
+                console.error('設定の保存中にエラーが発生しました:', e);
+            }
+        }
+        
+        /** LocalStorageから設定をロードし、実行中の設定を更新する */
+        function loadSettingsFromLocalStorage() {
+            try {
+                const savedSettings = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedSettings) {
+                    const loaded = JSON.parse(savedSettings);
+                    
+                    // ロードした設定をデフォルト設定とマージしてCURRENT_SETTINGSにセット
+                    CURRENT_SETTINGS = {
+                        ...DEFAULT_SETTINGS, 
+                        ...loaded,
+                        eewSoundMap: {
+                            ...DEFAULT_SETTINGS.eewSoundMap,
+                            ...(loaded.eewSoundMap || {})
+                        },
+                        customTones: {
+                            ...DEFAULT_SETTINGS.customTones,
+                            ...(loaded.customTones || {})
+                        },
+                         customUrls: {
+                            ...DEFAULT_SETTINGS.customUrls,
+                            ...(loaded.customUrls || {})
+                        },
+                        uiState: {
+                            ...DEFAULT_SETTINGS.uiState,
+                            ...(loaded.uiState || {})
+                        }
+                    };
+                    console.log('設定をLocalStorageからロードしました。');
+                } else {
+                    // 初回起動時、デフォルト設定を保存
+                    saveSettings(DEFAULT_SETTINGS); 
+                    console.log('LocalStorageに設定がないため、デフォルト設定を適用しました。');
+                }
+            } catch (e) {
+                console.error('設定のロード中にエラーが発生しました:', e);
+                CURRENT_SETTINGS = {...DEFAULT_SETTINGS};
+            }
+            
+            // UIに適用
+            updateUIFromSettings();
+            // URL音源のロードをトリガー
+            loadAllCustomUrls();
+        }
+
+        
+        /** 実行中の設定に基づいてUIを更新する */
+        function updateUIFromSettings() {
+            minIntensitySelect.value = CURRENT_SETTINGS.minIntensityScale;
+            eewDurationInput.value = CURRENT_SETTINGS.eewDuration;
+            quakeDurationInput.value = CURRENT_SETTINGS.quakeDuration;
+            
+            // 🚨 震度別アラーム音設定をUIに適用 🚨
+            soundForInt4El.value = CURRENT_SETTINGS.eewSoundMap.int4_down;
+            soundForInt5El.value = CURRENT_SETTINGS.eewSoundMap.int5_mid;
+            soundForInt6El.value = CURRENT_SETTINGS.eewSoundMap.int6_up;
+            
+            // 🎵 カスタムトーン (シンセ音) 設定をUIに適用 🎶
+            const customA = CURRENT_SETTINGS.customTones.custom_a;
+            const customB = CURRENT_SETTINGS.customTones.custom_b;
+            
+            customA_BaseFreq.value = customA.baseFreq;
+            customA_ModFreq.value = customA.modFreq;
+            customB_TempoMs.value = customB.tempoMs;
+
+            // 🔊 カスタムURL音源設定をUIに適用 🔊
+            customUrlAInput.value = CURRENT_SETTINGS.customUrls.custom_url_a;
+            customUrlBInput.value = CURRENT_SETTINGS.customUrls.custom_url_b;
+            
+            // UIの折りたたみ状態を適用
+            applyCollapsibleState(intensityAlarmContent, intensityAlarmIcon, CURRENT_SETTINGS.uiState.isIntensityAlarmExpanded);
+            applyCollapsibleState(customAlarmContent, customAlarmIcon, CURRENT_SETTINGS.uiState.isCustomAlarmExpanded);
+        }
+        
+        /** 折りたたみ要素の展開状態を適用するヘルパー関数 */
+        function applyCollapsibleState(contentEl, iconEl, isExpanded) {
+            if (isExpanded) {
+                contentEl.classList.add('expanded');
+                iconEl.textContent = '▼'; 
+            } else {
+                contentEl.classList.remove('expanded');
+                iconEl.textContent = '▶';
+            }
+        }
+
+        // ----------------------------------------------------
+        // ⚙️ 初期化とイベントリスナー ⚙️
+        // ----------------------------------------------------
+
+        const INTENSITY_OPTIONS = [
+            { value: 0, label: '設定なし/1未満' }, { value: 10, label: '1' },
+            { value: 20, label: '2' }, { value: 30, label: '3' }, 
+            { value: 40, label: '4' }, { value: 45, label: '5弱' },
+            { value: 50, label: '5強' }, { value: 55, label: '6弱' },
+            { value: 60, label: '6強' }, { value: 70, label: '7' },
+        ];
+        
+        /** DOMと初期設定のセットアップ */
+        function setupApp() {
+            // 震度セレクターのオプションを作成
+            INTENSITY_OPTIONS.forEach(optionData => {
+                const option = document.createElement('option');
+                option.value = optionData.value;
+                option.textContent = optionData.label;
+                minIntensitySelect.appendChild(option);
+            });
+            
+            // UIイベントリスナーの設定 (表示設定)
+            minIntensitySelect.addEventListener('change', (event) => {
+                saveSettings({ minIntensityScale: parseInt(event.target.value, 10) });
+            });
+            eewDurationInput.addEventListener('change', (event) => {
+                const newValue = parseInt(event.target.value, 10);
+                if (newValue >= 5) saveSettings({ eewDuration: newValue });
+                else event.target.value = CURRENT_SETTINGS.eewDuration;
+            });
+            // テロップ速度設定のリスナー
+            quakeDurationInput.addEventListener('change', (event) => {
+                const newValue = parseInt(event.target.value, 10);
+                if (newValue >= 10) saveSettings({ quakeDuration: newValue });
+                else event.target.value = CURRENT_SETTINGS.quakeDuration;
+            });
+
+            // 震度別アラーム音設定のリスナー
+            const updateSoundMap = () => {
+                const newMap = {
+                    int4_down: soundForInt4El.value,
+                    int5_mid: soundForInt5El.value,
+                    int6_up: soundForInt6El.value,
+                };
+                saveSettings({ eewSoundMap: newMap });
+            };
+            soundForInt4El.addEventListener('change', updateSoundMap);
+            soundForInt5El.addEventListener('change', updateSoundMap);
+            soundForInt6El.addEventListener('change', updateSoundMap);
+            
+            // 🎵 カスタムトーン (シンセ音) 設定のリスナー 🎶
+            const setupCustomToneListener = (inputEl, toneKey, propName) => {
+                inputEl.addEventListener('change', (event) => {
+                    const newValue = parseInt(event.target.value, 10);
+                    if (isNaN(newValue)) return;
+                    
+                    const update = {};
+                    update[toneKey] = {};
+                    update[toneKey][propName] = newValue;
+
+                    saveSettings({ customTones: update });
+                });
+            };
+
+            setupCustomToneListener(customA_BaseFreq, 'custom_a', 'baseFreq');
+            setupCustomToneListener(customA_ModFreq, 'custom_a', 'modFreq');
+            setupCustomToneListener(customB_TempoMs, 'custom_b', 'tempoMs'); 
+
+            // 🔊 カスタムURL音源のリスナー 🔊
+            const handleUrlChange = (inputEl, statusEl, key) => {
+                inputEl.addEventListener('change', (event) => {
+                    const newUrl = event.target.value.trim();
+                    statusEl.textContent = 'ロード中...';
+                    statusEl.classList.remove('text-green-500', 'text-red-500');
+                    statusEl.classList.add('text-yellow-500');
+
+                    const update = {};
+                    update[key] = newUrl;
+                    
+                    // saveSettingsを呼び出してCURRENT_SETTINGSを更新し、localStorageに保存
+                    saveSettings({ customUrls: update }); 
+                    
+                    // URLが変更されたら音源のロードを試みる
+                    if (newUrl) {
+                        loadAudioFromUrl(key, newUrl, statusEl);
+                    } else {
+                        audioBuffers[key] = null;
+                        statusEl.textContent = '未設定';
+                        statusEl.classList.remove('text-yellow-500', 'text-red-500');
+                    }
+                });
+            };
+            
+            handleUrlChange(customUrlAInput, customUrlAStatus, 'custom_url_a');
+            handleUrlChange(customUrlBInput, customUrlBStatus, 'custom_url_b');
+            
+            
+            // 震度別アラーム設定のトグル機能
+            toggleIntensityAlarm.addEventListener('click', () => {
+                const isExpanded = intensityAlarmContent.classList.toggle('expanded');
+                applyCollapsibleState(intensityAlarmContent, intensityAlarmIcon, isExpanded);
+                saveSettings({ uiState: { isIntensityAlarmExpanded: isExpanded } });
+            });
+
+            // カスタムアラーム設定のトグル機能
+            customAlarmToggle.addEventListener('click', () => {
+                const isExpanded = customAlarmContent.classList.toggle('expanded');
+                applyCollapsibleState(customAlarmContent, customAlarmIcon, isExpanded);
+                saveSettings({ uiState: { isCustomAlarmExpanded: isExpanded } });
+            });
+
+
+            // 設定パネルのトグル機能
+            toggleSettingsButton.addEventListener('click', () => {
+                const isHidden = testControls.classList.contains('-translate-x-full');
+                if (isHidden) {
+                    testControls.classList.remove('-translate-x-full');
+                    toggleSettingsButton.textContent = '設定 ▲';
+                } else {
+                    testControls.classList.add('-translate-x-full');
+                    toggleSettingsButton.textContent = '設定 ▼';
+                }
+            });
+            
+            // アニメーション終了時にテロップを非表示にするリスナー
+            tickerContent.addEventListener('animationend', () => {
+                quakeTickerArea.style.display = 'none';
+                tickerContent.style.animationName = 'none'; // アニメーションをリセット
+                console.log('地震情報テロップが完全にスクロールアウトしました。');
+            });
+
+
+            // AudioContextを初期化
+            initializeAudioContext();
+        }
+
+        // ----------------------------------------------------
+        // ユーティリティ関数
+        // ----------------------------------------------------
+        function intensityToJma(num) {
+            const map = {
+                10: '1', 20: '2', 30: '3', 40: '4', 45: '5弱',
+                50: '5強', 55: '6弱', 60: '6強', 70: '7'
+            };
+            return map[num] || '不明';
+        }
+        
+        /**
+         * 🚨 地震情報テロップの句読点をスペースに変換する
+         * @param {string} text - 変換対象のテキスト
+         * @returns {string} 句読点をスペースに置換したテキスト
+         */
+        function formatTickerText(text) {
+            // 句点(。)を全角スペース(　)に置換
+            let formattedText = text.replace(/。/g, '　');
+            // 読点(、)を半角スペース( )に置換
+            formattedText = formattedText.replace(/、/g, ' ');
+            return formattedText;
+        }
+
+        /** 警告表示を非表示にする */
+        function hideAlert() {
+            const alerts = document.querySelectorAll('.eew-alert');
+            alerts.forEach(alert => {
+                const serial = alert.getAttribute('data-eew-serial');
+                if (serial && activeAlertTimers[serial]) {
+                    clearTimeout(activeAlertTimers[serial]);
+                    delete activeAlertTimers[serial];
+                }
+                alert.remove();
+            });
+            
+            // テロップも強制非表示
+            if (quakeTickerArea.style.display !== 'none') {
+                quakeTickerArea.style.display = 'none';
+                tickerContent.style.animationName = 'none';
+                console.log('地震情報テロップも強制非表示にしました。');
+            }
+            
+            console.log('表示中の全てのアラートを非表示にしました。');
+        }
+        
+        /** 🚨 EEWのアラートがタイマーで消えた後にテロップ表示をスケジュールする 🚨 */
+        function scheduleQuakeTickerAfterEEW() {
+            // 既にテロップが表示中で、アニメーションが動いている場合は何もしない（552が既に到着している可能性）
+            if (quakeTickerArea.style.display !== 'none' && tickerContent.style.animationPlayState === 'running') {
+                console.log("EEW終了時: テロップは既に表示中（P2P 552データを受信済み）のため、汎用テロップはスキップします。");
+                return;
+            }
+            
+            // 汎用テロップメッセージを生成
+            const time = new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'});
+            const genericMessage = `🚨【地震発生】${time}頃、強い揺れを観測しました。地震の詳細情報は続報をお待ちください。 🚨`;
+
+            // showQuakeTicker に汎用メッセージを渡す (P2Pデータ構造の代わりにrawMessageを保持するオブジェクトとして渡す)
+            showQuakeTicker({ rawMessage: genericMessage });
+            console.log("EEW終了時: 汎用地震情報テロップの表示を開始しました。");
+        }
+
+        let activeAlertTimers = {}; // EEWシリアル番号とタイマーIDを保持
+
+        /** 警告のタイマーを設定する (EEW/津波) */
+        function setupAlertTimer(element, code, serial) {
+            // 既存タイマーがあればクリア
+            if (activeAlertTimers[serial]) {
+                clearTimeout(activeAlertTimers[serial]);
+                delete activeAlertTimers[serial];
+            }
+
+            const duration = CURRENT_SETTINGS.eewDuration; // EEW/津波表示時間
+
+            if (duration > 0) {
+                const timer = setTimeout(() => {
+                    // 🚨 修正: EEW (551)が消えるタイミングでテロップ表示をスケジュール 🚨
+                    if (code === 551) {
+                         scheduleQuakeTickerAfterEEW();
+                    }
+                    
+                    element.remove();
+                    delete activeAlertTimers[serial];
+                    console.log(`アラート ${serial} をタイマーで非表示にしました。`);
+                }, duration * 1000);
+                activeAlertTimers[serial] = timer;
+            }
+        }
+        
+        /** * 地震情報テロップの表示とアニメーション設定 
+         * @param {Object} data - P2P Quakeの552データ、または{ rawMessage: string }を持つオブジェクト
+         */
+        function showQuakeTicker(data) {
+            
+            let rawMessage;
+            
+            // 汎用メッセージが渡された場合（EEWタイマー終了時）
+            if (data.rawMessage) {
+                rawMessage = data.rawMessage;
+            } else {
+                // P2P 552データが渡された場合（通常 - processAlertDataから）
+                const time = new Date(data.earthquake.time || Date.now()).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'});
+                const maxIntText = intensityToJma(data.earthquake?.maxScale || 0);
+                const epicenter = data.earthquake.hypocenter?.name || '不明';
+                const magnitude = data.earthquake?.magnitude || '不明';
+                const depth = data.earthquake.hypocenter?.depth ? `${data.earthquake.hypocenter.depth}km` : '不明';
+
+                rawMessage = `🚨【地震情報】${time}頃発生 | 震源地: ${epicenter} (震源の深さ: ${depth}) | 地震の規模(M): ${magnitude} | 最大震度: ${maxIntText} 🚨`;
+            }
+            
+            const secondsPerScreen = CURRENT_SETTINGS.quakeDuration; // 画面幅をスクロールするのにかかる時間
+
+            // 句読点をスペースに置換
+            const formattedMessage = formatTickerText(rawMessage);
+
+            // テロップエリアの更新
+            tickerContent.textContent = formattedMessage + ' '.repeat(5); // メッセージの最後にわずかなスペースを追加
+            
+            // 確実に幅を取得するため、displayをflexに変更してから幅を取得
+            quakeTickerArea.style.display = 'flex'; 
+            
+            // 画面幅とコンテンツ幅を取得
+            const viewportWidth = quakeTickerArea.offsetWidth;
+            // scrollWidthはパディングを含む要素の全コンテンツ幅
+            const contentWidth = tickerContent.scrollWidth; 
+            
+            // スクロール速度の基準
+            const baseSpeed = viewportWidth / secondsPerScreen; 
+
+            // テロップ全体（画面幅 + コンテンツ幅）を移動するのにかかる時間（秒）
+            const totalDistance = viewportWidth + contentWidth; 
+            const totalDuration = totalDistance / baseSpeed;
+
+            // アニメーションをリセットし、速度を設定
+            tickerContent.style.animationName = 'none'; // 一度リセット
+            // DOMに再描画を強制し、アニメーションを再度適用
+            void tickerContent.offsetWidth; 
+            
+            // CSS変数に移動距離を設定
+            tickerContent.style.setProperty('--scroll-distance', `-${totalDistance}px`);
+            
+            // アニメーションの継続時間と再生状態を設定
+            tickerContent.style.animationDuration = `${totalDuration}s`;
+            tickerContent.style.animationName = 'ticker-scroll'; // アニメーションを再適用
+            tickerContent.style.animationPlayState = 'running';
+
+            console.log(`地震情報テロップを表示します。コンテンツ幅: ${contentWidth.toFixed(0)}px, 画面幅: ${viewportWidth.toFixed(0)}px。速度: ${baseSpeed.toFixed(0)}px/s、総アニメーション時間: ${totalDuration.toFixed(1)}秒。`);
+
+        }
+
+
+        // ----------------------------------------------------
+        // 🔊 アラーム音機能 🔊
+        // ----------------------------------------------------
+        let audioContext = null; 
+        let audioBuffers = {}; // 🔊 URL音源のキャッシュ 🔊
+        
+        function initializeAudioContext() {
+            if (audioContext && audioContext.state === 'running') return;
+            if (audioContext && audioContext.state === 'suspended') {
+                 audioContext.resume().catch(e => console.error("AudioContextの再開エラー:", e));
+                 return;
+            }
+            
+            if (!audioContext) {
+                try {
+                    // Safari互換性のためにwebkitAudioContextも考慮
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    console.log('AudioContextを初期化しました。');
+                } catch (e) {
+                    console.error('AudioContextの初期化に失敗しました:', e);
+                }
+            }
+        }
+        
+        /**
+         * 🔊 URLから音源をロードし、デコードしてキャッシュする 🔊
+         * @param {string} urlKey - custom_url_a または custom_url_b
+         * @param {string} url - 音源のURL
+         * @param {HTMLElement} statusEl - ステータス表示用のDOM要素
+         */
+        async function loadAudioFromUrl(urlKey, url, statusEl) {
+            if (!audioContext || !url) return;
+            
+            // URLが設定されていない場合はキャッシュをクリア
+            if (!url) {
+                audioBuffers[urlKey] = null;
+                if (statusEl) {
+                    statusEl.textContent = '未設定';
+                    statusEl.className = 'loading-status text-yellow-500';
+                }
+                return;
+            }
+
+            try {
+                if (statusEl) {
+                    statusEl.textContent = 'ロード中...';
+                    statusEl.className = 'loading-status text-yellow-500';
+                }
+                
+                // Exponential Backoffを使用したリトライロジック
+                const MAX_RETRIES = 3;
+                let response = null;
+                for (let i = 0; i < MAX_RETRIES; i++) {
+                    try {
+                        response = await fetch(url, { mode: 'cors' });
+                        if (response.ok) break; // 成功したらループを抜ける
+                        // HTTPエラーでも404/403の場合はリトライしても無駄なので、リトライしない
+                        if (response.status === 404 || response.status === 403) {
+                             throw new Error(`HTTPエラー: ${response.status}`);
+                        }
+                        // その他のエラー (例: 5xx, タイムアウトなど) の場合はリトライ
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                        console.log(`リトライ ${i + 1}/${MAX_RETRIES}: URL ${urlKey} のロードを再試行します。`);
+                    } catch (e) {
+                        if (e.message.includes('404') || e.message.includes('403')) {
+                            throw e; // 404/403は即座にエラーとする
+                        }
+                        if (i === MAX_RETRIES - 1) throw e; // 最後の試行でエラーならスロー
+                    }
+                }
+                
+                if (!response || !response.ok) {
+                    throw new Error(`HTTPエラー: ${response ? response.status : '不明なエラー'}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                audioBuffers[urlKey] = audioBuffer;
+                
+                if (statusEl) {
+                    statusEl.textContent = `ロード成功 (${(audioBuffer.duration).toFixed(1)}秒)`;
+                    statusEl.className = 'loading-status text-green-500';
+                }
+                console.log(`音源 ${urlKey} を正常にロードしキャッシュしました。`);
+            } catch (error) {
+                audioBuffers[urlKey] = null;
+                if (statusEl) {
+                    statusEl.textContent = 'ロード失敗 (CORS/URLエラー)';
+                    statusEl.className = 'loading-status text-red-500';
+                }
+                console.error(`音源 ${urlKey} のロード中にエラーが発生しました:`, error);
+                console.warn("CORSエラーまたは無効なURLの可能性があります。サーバー側で 'Access-Control-Allow-Origin: *' が設定されているか確認してください。");
+            }
+        }
+
+        /**
+         * ページロード時または設定ロード時に全てのカスタムURL音源をロードする
+         */
+        function loadAllCustomUrls() {
+            const urls = CURRENT_SETTINGS.customUrls;
+            const statusMap = {
+                'custom_url_a': customUrlAStatus,
+                'custom_url_b': customUrlBStatus
+            };
+
+            for (const key in urls) {
+                const url = urls[key];
+                const statusEl = statusMap[key];
+                // URLが設定されている場合のみロードを試みる
+                if (url) {
+                    loadAudioFromUrl(key, url, statusEl);
+                } else {
+                    // URLが空の場合はステータスをリセット
+                    if (statusEl) {
+                        statusEl.textContent = '未設定';
+                        statusEl.className = 'loading-status text-yellow-500';
+                    }
+                }
+            }
+        }
+
+        
+        /**
+         * 震度に応じて選択されたアラーム音を再生する
+         * @param {number} maxInt - 予想最大震度 (JMA Scale 10-70)
+         */
+        function playAlarmForIntensity(maxInt) {
+            
+            // 震度に応じてどの設定を使うか決定
+            let soundKey = 'int4_down'; 
+            if (maxInt >= 55) { 
+                soundKey = 'int6_up';
+            } else if (maxInt >= 45) { 
+                soundKey = 'int5_mid';
+            } 
+            
+            const alarmType = CURRENT_SETTINGS.eewSoundMap[soundKey] || 'classic_eew';
+            
+            if (alarmType === 'silent') {
+                console.log(`アラームは${soundKey}の設定によりミュートされています。`);
+                return;
+            }
+            
+            initializeAudioContext();
+            
+            if (!audioContext) {
+                console.error("AudioContextが利用できません。");
+                return;
+            }
+
+            // ----------------------------------------------------
+            // 🔊 URL音源の再生ロジック 🔊
+            // ----------------------------------------------------
+            if (alarmType.startsWith('custom_url_')) {
+                const buffer = audioBuffers[alarmType];
+                if (buffer) {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioContext.destination);
+                    source.start(0);
+                    console.log(`URL音源 (${alarmType}) を再生しました。`);
+                } else {
+                    console.error(`${alarmType}: 音声バッファがロードされていないか、ロードに失敗しています。デフォルトのEEW音を再生します。`);
+                    // ロード失敗時はフォールバックとしてEEW標準音を再生
+                    playSynthesizedAlarm('classic_eew'); 
+                }
+                return; // URL音源の再生が試行されたらここで終了
+            }
+            
+            // ----------------------------------------------------
+            // 🎵 シンセサイザー音の再生ロジック 🎶
+            // ----------------------------------------------------
+            playSynthesizedAlarm(alarmType);
+        }
+
+        /**
+         * シンセサイザー音（EEW標準、サイレン、カスタムトーン）を再生する
+         * @param {string} alarmType - 再生するアラームの種類
+         */
+        function playSynthesizedAlarm(alarmType) {
+            
+            if (!audioContext) { return; }
+            
+            let sequence = [];
+            let repeat = 0;
+            const masterGainVolume = 0.7;
+
+            if (alarmType === 'classic_eew') {
+                // EEW標準音 (660Hz/990Hz) - ピョロピョロ
+                sequence = [
+                    { freq: 660, duration: 0.15 }, 
+                    { freq: 990, duration: 0.15 }, 
+                    { freq: 0, duration: 0.05 },
+                ];
+                repeat = 4;
+            } else if (alarmType === 'urgent_siren') {
+                // 緊迫サイレン音 (1000Hz/800Hz)
+                sequence = [
+                    { freq: 1000, duration: 0.1 }, 
+                    { freq: 800, duration: 0.1 }, 
+                    { freq: 0, duration: 0.05 },
+                ];
+                repeat = 8;
+            } else if (alarmType === 'simple_beep') {
+                // ピーン音 (660Hz)
+                sequence = [
+                    { freq: 660, duration: 0.1 }, 
+                    { freq: 0, duration: 0.2 },
+                ];
+                repeat = 3; 
+            } else if (alarmType === 'custom_tone_a' || alarmType === 'custom_tone_b') {
+                // 🎵 カスタムトーンのロジック 🎶
+                const customA = CURRENT_SETTINGS.customTones.custom_a;
+                const customB = CURRENT_SETTINGS.customTones.custom_b;
+                
+                // カスタム音のシーケンス定義: [ベース周波数, ベース + 変調, 休憩] を繰り返す
+                const tempoSeconds = customB.tempoMs / 1000;
+
+                sequence = [
+                    { freq: customA.baseFreq, duration: tempoSeconds }, 
+                    { freq: customA.baseFreq + customA.modFreq, duration: tempoSeconds }, 
+                    { freq: 0, duration: 0.05 },
+                ];
+                repeat = customB.repeats;
+                console.log(`カスタムトーン (${alarmType}) を再生: Base=${customA.baseFreq}Hz, Mod=${customA.modFreq}Hz, Tempo=${customB.tempoMs}ms, Repeat=${customB.repeats}`);
+            } else {
+                return; // 未定義のアラームタイプ
+            }
+            
+            const totalDuration = sequence.reduce((sum, s) => sum + s.duration, 0) * repeat;
+
+            const masterGain = audioContext.createGain();
+            masterGain.gain.setValueAtTime(masterGainVolume, audioContext.currentTime); 
+            masterGain.connect(audioContext.destination);
+
+            let startTime = audioContext.currentTime;
+
+            for (let r = 0; r < repeat; r++) {
+                sequence.forEach(tone => {
+                    if (tone.freq > 0) {
+                        const oscillator = audioContext.createOscillator();
+                        const gainNode = audioContext.createGain();
+                        
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(tone.freq, startTime);
+                        
+                        // フェードイン/アウト処理
+                        gainNode.gain.setValueAtTime(0.0001, startTime);
+                        gainNode.gain.linearRampToValueAtTime(1.0, startTime + 0.01);
+                        gainNode.gain.linearRampToValueAtTime(0.0001, startTime + tone.duration - 0.01);
+
+                        oscillator.connect(gainNode);
+                        gainNode.connect(masterGain);
+
+                        oscillator.start(startTime);
+                        oscillator.stop(startTime + tone.duration);
+                    }
+                    
+                    startTime += tone.duration;
+                });
+            }
+
+            console.log(`シンセサイザーアラーム音を再生しました (${alarmType}、合計 ${totalDuration.toFixed(2)} 秒)。`);
+        }
+
+        // ----------------------------------------------------
+        // 🚨 メインロジック (EEW処理、続報、タイマー) 🚨
+        // ----------------------------------------------------
+        const WS_URL = 'wss://api.p2pquake.net/v2/ws';
+        const P2P_TYPES = [551, 552, 556]; // EEW, 地震情報, 津波予報
+
+        let ws;
+        let reconnectInterval = 5000; 
+        
+        /** EEWアラート要素のコンテンツを更新する (551 続報用) */
+        function updateAlertElementContent(element, data) {
+            const code = data.code;
+            const maxInt = data.earthquake?.maxScale || 0;
+            const time = new Date(data.time || Date.now()).toLocaleTimeString('ja-JP');
+            const maxIntText = intensityToJma(maxInt);
+            const serial = data.issue?.serial;
+            
+            // ... (HTML更新ロジック)
+            element.className = 'eew-alert'; 
+            if (maxInt >= 55) { element.className += ' intensity-6-up'; } 
+            else if (maxInt >= 45) { element.className += ' intensity-5-up'; } 
+            else if (maxInt >= 30) { element.className += ' intensity-3-up'; }
+
+            element.querySelector('.text-xl.mt-1').textContent = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（続報）`;
+            element.querySelector('.text-lg.mt-1').textContent = `震源地: ${data.earthquake.hypocenter?.name || '不明'} | 予想最大震度: ${maxIntText} (${data.earthquake?.magnitude || '不明'}M)`;
+            element.querySelector('.intensity-label').textContent = maxIntText;
+            
+            // 続報でもアラームを鳴らす
+            if (code === 551) {
+                playAlarmForIntensity(maxInt);
+            }
+            
+            setupAlertTimer(element, code, serial);
+        }
+
+        /** EEW/津波のアラート要素を新規作成する (551/556 新規用) */
+        function createAlertElement(data) {
+            const code = data.code;
+            const maxInt = data.earthquake?.maxScale || 0;
+            const serial = data.issue?.serial || `alert-${Date.now()}`;
+
+            // 🚨 修正: 最小震度設定による表示制御
+            if (code === 551 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
+                console.log(`EEWを受信しましたが、最大震度${intensityToJma(maxInt)}は設定されている最小震度${intensityToJma(CURRENT_SETTINGS.minIntensityScale)}未満のため表示しません。`);
+                return; 
+            }
+
+            const time = new Date(data.time || Date.now()).toLocaleTimeString('ja-JP');
+            let maxIntText = intensityToJma(maxInt);
+            let titleText = '';
+            let detailText = '';
+            let baseClass = 'eew-alert';
+            let alertTypeTitle = '';
+            let intensityUnitText = '最大震度';
+
+            if (code === 551) { // 緊急地震速報 (EEW)
+                titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（新規）`;
+                detailText = `震源地: ${data.earthquake.hypocenter?.name || '不明'} | 予想最大震度: ${maxIntText} (${data.earthquake?.magnitude || '不明'}M)`;
+                alertTypeTitle = '緊急地震速報';
+                
+                if (maxInt >= 55) { baseClass += ' intensity-6-up'; } 
+                else if (maxInt >= 45) { baseClass += ' intensity-5-up'; } 
+                else if (maxInt >= 30) { baseClass += ' intensity-3-up'; }
+                
+                // 新規EEW発生時にアラーム音を鳴らす
+                playAlarmForIntensity(maxInt);
+
+            } else if (code === 556) { // 津波予報 (音は鳴らさない)
+                titleText = '【津波情報】津波予報が発表されました';
+                detailText = data.issue.text || '詳細を確認してください';
+                maxIntText = 'TSU';
+                alertTypeTitle = '津波情報';
+                intensityUnitText = '区分';
+                baseClass += ' bg-blue-600 border-blue-300 animation-none'; 
+            } else {
+                return;
+            }
+            
+            const newAlert = document.createElement('div');
+            if (code === 551) { newAlert.setAttribute('data-eew-serial', serial); }
+            newAlert.id = `alert-${serial}`;
+            newAlert.className = `${baseClass}`; 
+            newAlert.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex flex-col">
+                        <p class="text-3xl font-bold">${alertTypeTitle}</p>
+                        <p class="text-xl mt-1">${titleText}</p>
+                        <p class="text-lg mt-1">${detailText}</p>
+                    </div>
+                    <div class="flex flex-col items-center ml-4">
+                        <p class="intensity-unit">${intensityUnitText}</p>
+                        <p class="intensity-label">${maxIntText}</p>
+                    </div>
+                </div>
+            `;
+
+            eewContainer.prepend(newAlert);
+            setupAlertTimer(newAlert, code, serial);
+        }
+
+        /** P2P Quakeから受信したデータのエントリーポイント */
+        function processAlertData(data) {
+            const code = data.code;
+            const serial = data.issue?.serial;
+            
+            if (code === 551 && serial) { // EEW (緊急地震速報)
+                const existingElement = document.querySelector(`[data-eew-serial="${serial}"]`);
+                if (existingElement) {
+                    // 続報として既存のアラートを更新
+                    updateAlertElementContent(existingElement, data);
+                    return;
+                }
+                // 新規アラートとして作成
+                createAlertElement(data);
+                
+            } else if (code === 552) { // 地震情報 (テロップ表示)
+                // EEWの代わりにテロップとして表示する
+                showQuakeTicker(data);
+                
+            } else if (code === 556) { // 津波予報
+                // 津波予報は大きなアラートとして表示
+                createAlertElement(data);
+            }
+        }
+        
+        // ----------------------------------------------------
+        // 🌐 WebSocket接続 🌐
+        // ----------------------------------------------------
+        function connectWebSocket() {
+            if (ws) { ws.close(); }
+
+            loadStatusEl.textContent = 'P2P地震情報に接続中...';
+
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                loadStatusEl.textContent = '接続済み';
+                loadStatusEl.classList.remove('bg-yellow-700');
+                loadStatusEl.classList.add('bg-teal-700');
+
+                ws.send(JSON.stringify({ "types": P2P_TYPES }));
+                setTimeout(() => { loadStatusEl.classList.add('hidden'); }, 5000);
+                reconnectInterval = 5000; 
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (P2P_TYPES.includes(data.code)) {
+                        console.log('地震情報を受信:', data);
+                        processAlertData(data); 
+                    }
+                } catch (e) {
+                    console.error('JSON解析エラー:', e);
+                }
+            };
+
+            ws.onclose = (event) => {
+                loadStatusEl.textContent = '接続切断。再接続を試みます...';
+                loadStatusEl.classList.remove('hidden');
+                loadStatusEl.classList.remove('bg-teal-700');
+                loadStatusEl.classList.add('bg-yellow-700');
+
+                setTimeout(connectWebSocket, reconnectInterval);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocketエラー:', error);
+                loadStatusEl.textContent = '接続エラーが発生しました。';
+                loadStatusEl.classList.remove('hidden');
+                loadStatusEl.classList.remove('bg-teal-700');
+                loadStatusEl.classList.add('bg-red-700');
+
+                ws.close(); 
+            };
+        }
+
+        // ----------------------------------------------------
+        // 🌟 テスト機能の実装 🌟
+        // ----------------------------------------------------
+        const TEST_EEW_SERIAL_A = "TEST-EEW-SERIAL-001";
+        
+        const TEST_DATA = {
+            'eew_5weak_a': {
+                "code": 551, "issue": {"source": "試験用A", "time": new Date().toISOString(), "type": "Alert", "serial": TEST_EEW_SERIAL_A},
+                "earthquake": {
+                    "time": new Date().toISOString(), "hypocenter": {"name": "地震A (震度5弱)", "depth": 10},
+                    "maxScale": 45, "magnitude": 6.2
+                }, "isTest": true
+            },
+            'eew_6strong_a': {
+                "code": 551, "issue": {"source": "試験用A", "time": new Date().toISOString(), "type": "Alert", "serial": TEST_EEW_SERIAL_A},
+                "earthquake": {
+                    "time": new Date().toISOString(), "hypocenter": {"name": "地震A (震度6強) [更新]", "depth": 10},
+                    "maxScale": 60, "magnitude": 7.5
+                }, "isTest": true
+            },
+            'quake_3': {
+                "code": 552, "issue": {"source": "試験用", "time": new Date().toISOString(), "type": "Detail", "serial": `TEST-QUAKE-SERIAL-${Date.now()}`},
+                "earthquake": {
+                    // テストデータには、句読点が含まれるようにしています。
+                    "time": new Date().toISOString(), "hypocenter": {"name": "千葉県東方沖で大きな地震が発生しました。マグニチュードは6.5と推定されています。津波の心配はありません。", "depth": 30},
+                    "maxScale": 30, "magnitude": 5.0
+                }, "isTest": true
+            }
+        };
+
+        testEew5WeakA.addEventListener('click', () => { processAlertData(TEST_DATA['eew_5weak_a']); });
+        testEew6StrongA.addEventListener('click', () => { processAlertData(TEST_DATA['eew_6strong_a']); });
+        testQuake3Button.addEventListener('click', () => { 
+            // 地震情報テロップのテスト
+            processAlertData(TEST_DATA['quake_3']); 
+        });
+        
+        testSoundButton.addEventListener('click', () => {
+            // 現在の震度6強に設定されているアラーム設定を使ってテスト
+            const maxInt = 60; 
+            playAlarmForIntensity(maxInt);
+            console.log(`テスト: 震度6強に設定されているアラーム (${CURRENT_SETTINGS.eewSoundMap.int6_up}) を再生します。`);
+        });
+
+        clearAlertButton.addEventListener('click', () => { hideAlert(); });
+
+        // ----------------------------------------------------
+        // 🚀 起動 🚀
+        // ----------------------------------------------------
+        window.onload = () => {
+            setupApp(); // UIとAudioContextの初期化
+            loadSettingsFromLocalStorage(); // LocalStorageから設定をロード
+            connectWebSocket(); // WebSocket接続を開始
+            
+            loadStatusEl.classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>
