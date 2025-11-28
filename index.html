@@ -189,6 +189,28 @@
             border-radius: 6px;
         }
 
+        /* 履歴リストのスタイル */
+        #history-list {
+            max-height: 300px; /* 高さが300pxを超えたらスクロール */
+            overflow-y: auto;
+            padding-right: 8px; /* スクロールバーのためのスペース */
+        }
+        .history-item {
+            font-size: 0.75rem; /* text-xs */
+            padding: 6px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            border-left: 4px solid;
+        }
+        .history-item.displayed {
+            background-color: rgba(67, 56, 202, 0.3); /* bg-indigo-800/30 */
+            border-color: #4ade80; /* green-400 */
+        }
+        .history-item.skipped {
+            background-color: rgba(75, 85, 99, 0.2); /* bg-gray-600/20 */
+            border-color: #facc15; /* yellow-400 */
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
@@ -332,6 +354,29 @@
             </div>
         </div>
 
+        <!-- 5. 受信履歴グループ -->
+        <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg mb-4">
+            <div class="flex justify-between items-center w-full border-b border-gray-700 pb-1 mb-1">
+                <p class="text-sm font-semibold text-gray-300">▶ 受信履歴 (最新50件)</p>
+                <button id="clear-history" class="text-xs text-gray-400 hover:text-white transition">全消去</button>
+            </div>
+            <!-- 凡例を追加 -->
+            <div class="text-xs text-gray-400 flex items-center gap-3 px-1 -mt-1">
+                <span>凡例:</span>
+                <div class="flex items-center gap-1">
+                    <span class="w-2.5 h-2.5" style="background-color: #4ade80;"></span>
+                    <span>表示</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="w-2.5 h-2.5" style="background-color: #facc15;"></span>
+                    <span>スキップ</span>
+                </div>
+            </div>
+            <ul id="history-list">
+                <!-- 履歴はここに動的に追加されます -->
+            </ul>
+        </div>
+
         <!-- 4. テストグループ -->
         <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg">
             <p class="text-sm font-semibold text-gray-300 w-full border-b border-gray-700 pb-1 mb-1">▶ テスト/ユーティリティ</p>
@@ -391,6 +436,10 @@
         const customUrlBInput = document.getElementById('custom-url-b-input');
         const customUrlBStatus = document.getElementById('custom-url-b-status');
 
+        // 履歴関連の要素
+        const historyListEl = document.getElementById('history-list');
+        const clearHistoryButton = document.getElementById('clear-history');
+
 
         // テスト用ボタンの取得
         const testEew5WeakA = document.getElementById('test-eew-5weak-a');
@@ -398,6 +447,10 @@
         const testQuake3Button = document.getElementById('test-quake-3');
         const testSoundButton = document.getElementById('test-sound'); 
         const clearAlertButton = document.getElementById('clear-alert');
+
+        // 履歴データを保持する配列
+        let receivedHistory = [];
+        const MAX_HISTORY_COUNT = 50;
 
         // ----------------------------------------------------
         // 🌟 永続化のための設定 🌟
@@ -703,9 +756,55 @@
                 console.log('地震情報テロップが完全にスクロールアウトしました。');
             });
 
+            // 履歴クリアボタンのリスナー
+            clearHistoryButton.addEventListener('click', () => {
+                receivedHistory = [];
+                renderHistoryList();
+                tickerContent.style.animationName = 'none'; // アニメーションをリセット
+                console.log('地震情報テロップが完全にスクロールアウトしました。');
+            });
+
 
             // AudioContextを初期化
             initializeAudioContext();
+        }
+
+        /** 履歴リストをUIに描画する */
+        function renderHistoryList() {
+            historyListEl.innerHTML = ''; // リストをクリア
+            
+            receivedHistory.forEach(item => {
+                const li = document.createElement('li');
+                li.className = `history-item ${item.displayed ? 'displayed' : 'skipped'}`;
+                
+                const timeStr = new Date(item.time).toLocaleTimeString('ja-JP');
+                const displayStatus = item.displayed ? '表示' : 'スキップ';
+                
+                let infoText = '';
+                if (item.type === 'EEW') {
+                    infoText = `[EEW] 震度: ${item.maxIntText} | 震源: ${item.epicenter}`;
+                } else if (item.type === 'QuakeInfo') {
+                    infoText = `[地震情報] 震度: ${item.maxIntText} | 震源: ${item.epicenter}`;
+                }
+
+                li.innerHTML = `
+                    <div class="flex justify-between items-center text-white">
+                        <span class="font-semibold">${timeStr}</span>
+                        <span class="font-bold text-xs px-1.5 py-0.5 rounded ${item.displayed ? 'bg-green-600' : 'bg-yellow-600'}">${displayStatus}</span>
+                    </div>
+                    <p class="text-gray-300 mt-0.5">${infoText}</p>
+                `;
+                historyListEl.appendChild(li);
+            });
+        }
+
+        /** 履歴データを追加する */
+        function addHistoryItem(item) {
+            receivedHistory.unshift(item); // 新しいものを先頭に追加
+            if (receivedHistory.length > MAX_HISTORY_COUNT) {
+                receivedHistory.pop(); // 上限を超えたら古いものを削除
+            }
+            renderHistoryList(); // UIを更新
         }
 
         // ----------------------------------------------------
@@ -1169,8 +1268,10 @@
 
             // 🚨 修正: 最小震度設定による表示制御
             if (code === 551 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
-                console.log(`EEWを受信しましたが、最大震度${intensityToJma(maxInt)}は設定されている最小震度${intensityToJma(CURRENT_SETTINGS.minIntensityScale)}未満のため表示しません。`);
-                return; 
+                // 修正: なぜ表示されないのかをコンソールに明確に出力する
+                const minIntensityLabel = intensityToJma(CURRENT_SETTINGS.minIntensityScale);
+                console.log(`EEW受信: 最大震度 ${intensityToJma(maxInt)}。設定された最低震度「${minIntensityLabel}」未満のため、アラート表示をスキップしました。`);
+                return; // ここで処理を終了
             }
 
             const time = new Date(data.time || Date.now()).toLocaleTimeString('ja-JP');
@@ -1231,12 +1332,23 @@
             const code = data.code;
             const serial = data.issue?.serial;
             
+            // 履歴用の情報を先に準備
+            const historyItem = {
+                time: data.time || new Date().toISOString(),
+                epicenter: data.earthquake?.hypocenter?.name || '不明',
+                maxInt: data.earthquake?.maxScale || 0,
+                maxIntText: intensityToJma(data.earthquake?.maxScale || 0),
+                displayed: false, // デフォルトは非表示
+                type: 'Unknown'
+            };
+
             if (code === 551 && serial) { // EEW (緊急地震速報)
+                historyItem.type = 'EEW';
                 const existingElement = document.querySelector(`[data-eew-serial="${serial}"]`);
                 if (existingElement) {
                     // 続報として既存のアラートを更新
+                    historyItem.displayed = true; // 続報は必ず表示される
                     updateAlertElementContent(existingElement, data);
-                    return;
                 }
                 // 新規アラートとして作成
                 createAlertElement(data);
@@ -1244,25 +1356,37 @@
             } else if (code === 552) { // 地震情報 (テロップ表示)
                 // EEWの代わりにテロップとして表示する
                 showQuakeTicker(data);
+                historyItem.type = 'QuakeInfo';
+                historyItem.displayed = true;
                 
             } else if (code === 556) { // 津波予報
                 // 津波予報は大きなアラートとして表示
                 createAlertElement(data);
             }
+
+            // 表示判定ロジック (createAlertElement内で行われるため、ここで再判定)
+            if (code === 551) {
+                if (historyItem.maxInt >= CURRENT_SETTINGS.minIntensityScale) {
+                    historyItem.displayed = true;
+                }
+            }
+
+            // 履歴を追加
+            addHistoryItem(historyItem);
         }
-        
+
         // ----------------------------------------------------
         // 🌐 WebSocket接続 🌐
         // ----------------------------------------------------
         function connectWebSocket() {
             if (ws) { ws.close(); }
 
-            loadStatusEl.textContent = 'P2P地震情報に接続中...';
+            loadStatusEl.textContent = '接続中...';
 
             ws = new WebSocket(WS_URL);
 
             ws.onopen = () => {
-                loadStatusEl.textContent = '接続済み';
+                loadStatusEl.textContent = '接続完了';
                 loadStatusEl.classList.remove('bg-yellow-700');
                 loadStatusEl.classList.add('bg-teal-700');
 
@@ -1284,7 +1408,7 @@
             };
 
             ws.onclose = (event) => {
-                loadStatusEl.textContent = '接続切断。再接続を試みます...';
+                loadStatusEl.textContent = '切断。再接続中...';
                 loadStatusEl.classList.remove('hidden');
                 loadStatusEl.classList.remove('bg-teal-700');
                 loadStatusEl.classList.add('bg-yellow-700');
@@ -1294,7 +1418,7 @@
 
             ws.onerror = (error) => {
                 console.error('WebSocketエラー:', error);
-                loadStatusEl.textContent = '接続エラーが発生しました。';
+                loadStatusEl.textContent = '接続エラー';
                 loadStatusEl.classList.remove('hidden');
                 loadStatusEl.classList.remove('bg-teal-700');
                 loadStatusEl.classList.add('bg-red-700');
