@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -237,7 +238,7 @@
     </button>
 
     <!-- テスト用コントロールパネル -->
-    <div id="test-controls" class="w-[320px] h-full p-4 bg-gray-900 bg-opacity-95 fixed top-0 left-0 transform -translate-x-full transition-transform duration-300 z-[2000] overflow-y-auto" style="pointer-events: auto;">
+    <div id="test-controls" class="w-[320px] p-4 pb-24 bg-gray-900 bg-opacity-95 fixed top-0 left-0 bottom-[120px] transform -translate-x-full transition-transform duration-300 z-[2000] overflow-y-auto" style="pointer-events: auto;">
         
         <h2 class="text-white text-xl font-bold mb-4 border-b border-gray-700 pb-2">EEW オーバーレイ設定 (Local Storage)</h2>
 
@@ -396,6 +397,12 @@
                 </button>
                 <button id="test-quake-3" class="px-2 py-1 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition duration-150 text-sm shadow-md">地震情報<br>テロップ</button>
                 <button id="test-sound" class="px-2 py-1 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-150 text-sm shadow-md">アラーム音<br>テスト</button>
+                <button id="test-tsunami-advisory" class="px-2 py-1 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 text-sm shadow-md">
+                    <span class="test-button-label">津波注意報<br>テスト</span>
+                </button>
+                <button id="test-tsunami-major-warning" class="px-2 py-1 bg-purple-800 text-white font-semibold rounded-lg hover:bg-purple-900 transition duration-150 text-sm shadow-md">
+                    <span class="test-button-label">大津波警報<br>テスト</span>
+                </button>
             </div>
             <button id="clear-alert" class="w-full px-2 py-1 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-150 text-sm shadow-md mt-2">すべてのアラートを非表示</button>
         </div>
@@ -454,6 +461,8 @@
         const testEew5WeakA = document.getElementById('test-eew-5weak-a');
         const testEew6StrongA = document.getElementById('test-eew-6strong-a');
         const testQuake3Button = document.getElementById('test-quake-3');
+        const testTsunamiAdvisory = document.getElementById('test-tsunami-advisory');
+        const testTsunamiMajorWarning = document.getElementById('test-tsunami-major-warning');
         const testSoundButton = document.getElementById('test-sound'); 
         const clearAlertButton = document.getElementById('clear-alert');
 
@@ -1323,11 +1332,13 @@
             let baseClass = 'eew-alert';
             let alertTypeTitle = '';
             let intensityUnitText = '最大震度';
+            let intensityDisplayHtml = ''; // 震度またはアイコンを表示する部分
 
             if (code === 551) { // 緊急地震速報 (EEW)
                 titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（新規）`;
                 detailText = `震源地: ${data.earthquake.hypocenter?.name || '不明'} | 予想最大震度: ${maxIntText} (${data.earthquake?.magnitude || '不明'}M)`;
                 alertTypeTitle = '緊急地震速報';
+                intensityDisplayHtml = `<p class="intensity-unit">最大震度</p><p class="intensity-label">${maxIntText}</p>`;
                 
                 if (maxInt >= 55) { baseClass += ' intensity-6-up'; } 
                 else if (maxInt >= 45) { baseClass += ' intensity-5-up'; } 
@@ -1336,19 +1347,44 @@
                 // 新規EEW発生時にアラーム音を鳴らす
                 playAlarmForIntensity(maxInt);
 
-            } else if (code === 556) { // 津波予報 (音は鳴らさない)
-                titleText = '【津波情報】津波予報が発表されました';
+            } else if (code === 556) { // 津波情報 (音は鳴らさない)
                 detailText = data.issue.text || '詳細を確認してください';
-                maxIntText = 'TSU';
-                alertTypeTitle = '津波情報';
-                intensityUnitText = '区分';
-                baseClass += ' bg-blue-600 border-blue-300 animation-none'; 
+                let warningComment = ''; // 注意喚起コメント用の変数を追加
+                let textColorClass = 'text-white'; // 文字色のデフォルトは白
+
+                // 警報レベルに応じてタイトルと注意喚起コメントを動的に変更
+                if (detailText.includes('大津波警報')) {
+                    alertTypeTitle = '大津波警報を発表';
+                    warningComment = 'ただちに高台へ避難してください';
+                    baseClass += ' bg-purple-800 border-purple-300'; // 背景色: 赤紫
+                } else if (detailText.includes('津波警報')) {
+                    alertTypeTitle = '津波警報を発表';
+                    warningComment = '海岸から離れてください';
+                    baseClass += ' bg-red-700 border-red-300'; // 背景色: 赤
+                } else if (detailText.includes('津波注意報')) {
+                    alertTypeTitle = '津波注意報を発表';
+                    warningComment = '海岸に近づかないでください';
+                    baseClass += ' bg-yellow-500 border-yellow-200'; // 背景色: 黄色
+                    textColorClass = 'text-black'; // 文字色: 黒
+                } else {
+                    alertTypeTitle = '津波情報'; // フォールバック
+                    warningComment = 'テレビ・ラジオで情報を確認してください';
+                    baseClass += ' bg-blue-600 border-blue-300'; // デフォルトの背景色: 青
+                }
+                titleText = warningComment; // 小さい方のタイトルを注意喚起コメントに置き換え
+                baseClass += ` animation-none ${textColorClass}`; // アニメーションなしと文字色クラスを追加
+                // 指定された画像URLをアイコンとして表示
+                intensityDisplayHtml = `<div class="w-24 h-24"><img src="https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/blob/main/TsunamiHazardSign.svg.png?raw=true" alt="津波アイコン" class="w-full h-full object-contain"></div>`;
             } else {
                 return;
             }
             
             const newAlert = document.createElement('div');
-            if (code === 551) { newAlert.setAttribute('data-eew-serial', serial); }
+            if (code === 551) {
+                newAlert.setAttribute('data-eew-serial', serial);
+            } else if (code === 556) {
+                newAlert.setAttribute('data-alert-type', 'tsunami'); // 津波アラート用の属性を追加
+            }
             newAlert.id = `alert-${serial}`;
             newAlert.className = `${baseClass}`; 
             newAlert.innerHTML = `
@@ -1359,8 +1395,7 @@
                         <p class="text-lg mt-1">${detailText}</p>
                     </div>
                     <div class="flex flex-col items-center ml-4">
-                        <p class="intensity-unit">${intensityUnitText}</p>
-                        <p class="intensity-label">${maxIntText}</p>
+                        ${intensityDisplayHtml}
                     </div>
                 </div>
             `;
@@ -1391,9 +1426,10 @@
                     // 続報として既存のアラートを更新
                     historyItem.displayed = true; // 続報は必ず表示される
                     updateAlertElementContent(existingElement, data);
+                } else {
+                    // 新規アラートとして作成
+                    createAlertElement(data);
                 }
-                // 新規アラートとして作成
-                createAlertElement(data);
                 
             } else if (code === 552) { // 地震情報 (テロップ表示)
                 // EEWの代わりにテロップとして表示する
@@ -1402,8 +1438,23 @@
                 historyItem.displayed = true;
                 
             } else if (code === 556) { // 津波予報
-                // 津波予報は大きなアラートとして表示
-                createAlertElement(data);
+                historyItem.type = 'TsunamiInfo';
+                const text = data.issue?.text || '';
+                const isWarning = text.includes('津波警報') || text.includes('大津波警報') || text.includes('津波注意報');
+                const isCancelled = text.includes('解除');
+
+                if (isCancelled) {
+                    // 解除報を受信したら、表示中のすべての津波アラートを削除
+                    document.querySelectorAll('[data-alert-type="tsunami"]').forEach(el => el.remove());
+                    console.log('津波警報の解除報を受信したため、関連アラートを非表示にしました。');
+                    historyItem.displayed = true; // 解除も重要な情報なので表示扱い
+                } else if (isWarning) {
+                    // 警報・注意報を受信したら、上部アラートとして表示
+                    createAlertElement(data);
+                    historyItem.displayed = true;
+                } else {
+                    console.log(`津波情報を受信しましたが、警報・注意報・解除報ではないため表示をスキップしました: ${text}`);
+                }
             }
 
             // 表示判定ロジック (createAlertElement内で行われるため、ここで再判定)
@@ -1499,15 +1550,31 @@
                     "time": new Date().toISOString(), "hypocenter": {"name": "千葉県東方沖で大きな地震が発生しました。マグニチュードは6.5と推定されています。津波の心配はありません。", "depth": 30},
                     "maxScale": 30, "magnitude": 5.0
                 }, "isTest": true
+            },
+            'tsunami_advisory': {
+                "code": 556, "issue": {
+                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`
+                },
+                "areas": [
+                    {"grade": "Watch", "immediate": false, "name": "岩手県"},
+                    {"grade": "Watch", "immediate": false, "name": "宮城県"}
+                ],
+                "issue": { "text": "岩手県、宮城県に津波注意報を発表しました。"},
+                "isTest": true
+            },
+            'tsunami_major_warning': {
+                "code": 556, "issue": {
+                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`
+                , "text": "沖縄県に大津波警報が発表されました。ただちに高台に避難してください。"},
+                "isTest": true
             }
         };
 
         testEew5WeakA.addEventListener('click', () => { processAlertData(TEST_DATA['eew_5weak_a']); });
         testEew6StrongA.addEventListener('click', () => { processAlertData(TEST_DATA['eew_6strong_a']); });
-        testQuake3Button.addEventListener('click', () => { 
-            // 地震情報テロップのテスト
-            processAlertData(TEST_DATA['quake_3']); 
-        });
+        testQuake3Button.addEventListener('click', () => { processAlertData(TEST_DATA['quake_3']); });
+        testTsunamiAdvisory.addEventListener('click', () => { processAlertData(TEST_DATA['tsunami_advisory']); });
+        testTsunamiMajorWarning.addEventListener('click', () => { processAlertData(TEST_DATA['tsunami_major_warning']); });
         
         testSoundButton.addEventListener('click', () => {
             // 現在の震度6強に設定されているアラーム設定を使ってテスト
