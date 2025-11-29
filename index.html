@@ -466,6 +466,10 @@
         const testSoundButton = document.getElementById('test-sound'); 
         const clearAlertButton = document.getElementById('clear-alert');
 
+        // 津波警報の状態を管理する変数
+        let activeTsunamiInfo = null;
+
+
         // 履歴データを保持する配列
         let receivedHistory = [];
         const MAX_HISTORY_COUNT = 50;
@@ -921,6 +925,58 @@
             console.log("EEW終了時: 汎用地震情報テロップの表示を開始しました。");
         }
 
+        /**
+         * 🌊 津波警報テロップの表示とアニメーション設定 🌊
+         */
+        function showTsunamiTicker() {
+            if (!activeTsunamiInfo) return; // 表示すべき情報がなければ何もしない
+
+            const formattedMessage = `🌊 ${formatTickerText(activeTsunamiInfo)} 🌊`;
+
+            // テロップエリアのスタイルを津波用に変更
+            quakeTickerArea.style.backgroundColor = 'rgba(15, 76, 129, 0.95)'; // 濃い青
+            quakeTickerArea.style.borderColor = '#60a5fa'; // 明るい青
+
+            tickerContent.textContent = formattedMessage + ' '.repeat(10);
+            quakeTickerArea.style.display = 'flex';
+
+            const viewportWidth = quakeTickerArea.offsetWidth;
+            const contentWidth = tickerContent.scrollWidth;
+            const totalDistance = viewportWidth + contentWidth;
+            const baseSpeed = viewportWidth / CURRENT_SETTINGS.quakeDuration;
+            const totalDuration = totalDistance / baseSpeed;
+
+            tickerContent.style.animationName = 'none';
+            void tickerContent.offsetWidth;
+
+            tickerContent.style.setProperty('--scroll-distance', `-${totalDistance}px`);
+            tickerContent.style.animationDuration = `${totalDuration}s`;
+            tickerContent.style.animationIterationCount = 'infinite'; // ★繰り返し表示
+            tickerContent.style.animationName = 'ticker-scroll';
+            tickerContent.style.animationPlayState = 'running';
+
+            console.log(`津波警報テロップを表示します: ${activeTsunamiInfo}`);
+        }
+
+        /** 津波警報テロップを非表示にする */
+        function hideTsunamiTicker() {
+            if (!activeTsunamiInfo) return; // 既に非表示なら何もしない
+
+            activeTsunamiInfo = null; // 津波警報状態を解除
+
+            // テロップが津波用の場合のみ非表示処理を行う
+            if (quakeTickerArea.style.backgroundColor.startsWith('rgba(15, 76, 129')) {
+                quakeTickerArea.style.display = 'none';
+                tickerContent.style.animationName = 'none';
+                tickerContent.style.animationIterationCount = '1'; // 繰り返しをリセット
+
+                // テロップエリアのスタイルをデフォルト（地震情報用）に戻す
+                quakeTickerArea.style.backgroundColor = 'rgba(179, 11, 11, 0.95)';
+                quakeTickerArea.style.borderColor = 'rgb(255, 255, 255)';
+                console.log('津波警報テロップを非表示にしました。');
+            }
+        }
+
         let activeAlertTimers = {}; // EEWシリアル番号とタイマーIDを保持
 
         /** 警告のタイマーを設定する (EEW/津波) */
@@ -935,9 +991,12 @@
 
             if (duration > 0) {
                 const timer = setTimeout(() => {
-                    // 🚨 修正: EEW (551)が消えるタイミングでテロップ表示をスケジュール 🚨
+                    // アラートが消えるタイミングで後続処理を実行
                     if (code === 551) {
-                         scheduleQuakeTickerAfterEEW();
+                        scheduleQuakeTickerAfterEEW();
+                    } else if (code === 556) {
+                        // 津波アラートが消えたら、詳細テロップを開始
+                        showTsunamiTicker();
                     }
                     
                     element.remove();
@@ -952,6 +1011,11 @@
          * @param {Object} data - P2P Quakeの552データ、または{ rawMessage: string }を持つオブジェクト
          */
         function showQuakeTicker(data) {
+            // 津波警報が発令中の場合は、地震情報テロップを表示しない
+            if (activeTsunamiInfo) {
+                console.log('津波警報が有効なため、地震情報テロップの表示をスキップしました。');
+                return;
+            }
             
             let rawMessage;
             
@@ -1443,13 +1507,40 @@
                 const isWarning = text.includes('津波警報') || text.includes('大津波警報') || text.includes('津波注意報');
                 const isCancelled = text.includes('解除');
 
+                // 詳細テロップ用の情報を作成
+                let detailTickerText = '';
+                if (data.areas && data.areas.length > 0) {
+                    detailTickerText = data.areas.map(area => {
+                        let heightText = '';
+                        if (area.maxHeight) {
+                            if (area.maxHeight.value) {
+                                heightText = `予想高さ ${area.maxHeight.value}m`;
+                            } else if (area.maxHeight.condition) {
+                                heightText = `予想 ${area.maxHeight.condition}`;
+                            }
+                        }
+                        let timeText = '';
+                        if (area.firstHeight) {
+                            if (area.firstHeight.time) {
+                                const arrivalTime = new Date(area.firstHeight.time);
+                                timeText = `到達 ${arrivalTime.getHours()}時${arrivalTime.getMinutes()}分`;
+                            } else if (area.firstHeight.condition) {
+                                timeText = area.firstHeight.condition;
+                            }
+                        }
+                        return `${area.name} ${timeText} ${heightText}`;
+                    }).join(' | ');
+                }
+
                 if (isCancelled) {
                     // 解除報を受信したら、表示中のすべての津波アラートを削除
                     document.querySelectorAll('[data-alert-type="tsunami"]').forEach(el => el.remove());
+                    hideTsunamiTicker();
                     console.log('津波警報の解除報を受信したため、関連アラートを非表示にしました。');
                     historyItem.displayed = true; // 解除も重要な情報なので表示扱い
                 } else if (isWarning) {
                     // 警報・注意報を受信したら、上部アラートとして表示
+                    activeTsunamiInfo = detailTickerText || text; // 詳細情報があればそれを、なければ元のテキストをテロップ用に保持
                     createAlertElement(data);
                     historyItem.displayed = true;
                 } else {
