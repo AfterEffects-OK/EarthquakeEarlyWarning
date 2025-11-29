@@ -360,7 +360,7 @@
             <button id="toggle-history" class="toggle-header flex justify-between items-center w-full text-sm font-semibold text-gray-300 border-gray-700 hover:text-white transition">
                 <div class="flex items-center">
                     <span id="history-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
-                    <span>受信履歴 (最新50件)</span>
+                    <span class="leading-tight text-left">受信履歴<br>(最新50件)</span>
                 </div>
                 <span id="clear-history" class="text-xs text-gray-400 hover:text-white transition z-10 p-1 -mr-1">全消去</span>
             </button>
@@ -464,6 +464,7 @@
         // ----------------------------------------------------
         // 🌟 永続化のための設定 🌟
         // ----------------------------------------------------
+        const HISTORY_STORAGE_KEY = 'eewOverlayHistory';
         const LOCAL_STORAGE_KEY = 'eewOverlaySettings';
 
         const DEFAULT_SETTINGS = {
@@ -777,6 +778,7 @@
             // 履歴クリアボタンのリスナー
             clearHistoryButton.addEventListener('click', () => {
                 receivedHistory = [];
+                localStorage.removeItem(HISTORY_STORAGE_KEY); // LocalStorageからも削除
                 renderHistoryList(); // UIを更新
             });
 
@@ -821,6 +823,30 @@
                 receivedHistory.pop(); // 上限を超えたら古いものを削除
             }
             renderHistoryList(); // UIを更新
+        }
+
+        /** 履歴をLocalStorageに保存する */
+        function saveHistoryToLocalStorage() {
+            try {
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(receivedHistory));
+            } catch (e) {
+                console.error('履歴の保存中にエラーが発生しました:', e);
+            }
+        }
+
+        /** LocalStorageから履歴をロードする */
+        function loadHistoryFromLocalStorage() {
+            try {
+                const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
+                if (savedHistory) {
+                    receivedHistory = JSON.parse(savedHistory);
+                    console.log('履歴をLocalStorageからロードしました。');
+                }
+            } catch (e) {
+                console.error('履歴のロード中にエラーが発生しました:', e);
+                receivedHistory = [];
+            }
+            renderHistoryList(); // ロードした履歴をUIに反映
         }
 
         // ----------------------------------------------------
@@ -1389,6 +1415,9 @@
 
             // 履歴を追加
             addHistoryItem(historyItem);
+
+            // 履歴を永続化
+            saveHistoryToLocalStorage();
         }
 
         // ----------------------------------------------------
@@ -1495,6 +1524,7 @@
         window.onload = () => {
             setupApp(); // UIとAudioContextの初期化
             loadSettingsFromLocalStorage(); // LocalStorageから設定をロード
+            loadHistoryFromLocalStorage(); // LocalStorageから履歴をロード
             connectWebSocket(); // WebSocket接続を開始
             
             loadStatusEl.classList.remove('hidden');
