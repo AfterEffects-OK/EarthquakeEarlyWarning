@@ -254,6 +254,12 @@
                 </select>
             </div>
             <div class="flex items-center justify-between">
+                <label for="min-intensity-ticker" class="text-white text-sm font-medium whitespace-nowrap">テロップ表示最低震度:</label>
+                <select id="min-intensity-ticker" class="p-1 rounded text-sm w-28 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                    <!-- オプションはJavaScriptで設定 -->
+                </select>
+            </div>
+            <div class="flex items-center justify-between">
                 <label for="eew-duration" class="text-white text-sm font-medium whitespace-nowrap">EEWアラート時間(秒):</label>
                 <input type="number" id="eew-duration" min="5" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
             </div>
@@ -414,6 +420,7 @@
         // DOM要素の取得
         const eewContainer = document.getElementById('eew-container');
         const loadStatusEl = document.getElementById('load-status');
+        const minIntensityTickerSelect = document.getElementById('min-intensity-ticker');
         const minIntensitySelect = document.getElementById('min-intensity'); 
         const eewDurationInput = document.getElementById('eew-duration');
         const quakeDurationInput = document.getElementById('quake-duration'); 
@@ -482,6 +489,7 @@
 
         const DEFAULT_SETTINGS = {
             minIntensityScale: 50, // 震度5弱
+            minIntensityScaleTicker: 30, // テロップは震度3
             eewDuration: 15,       // EEW表示時間 (秒)
             quakeDuration: 20,     // 地震情報テロップのスクロール速度 (秒/画面幅)
             
@@ -612,6 +620,7 @@
         /** 実行中の設定に基づいてUIを更新する */
         function updateUIFromSettings() {
             minIntensitySelect.value = CURRENT_SETTINGS.minIntensityScale;
+            minIntensityTickerSelect.value = CURRENT_SETTINGS.minIntensityScaleTicker;
             eewDurationInput.value = CURRENT_SETTINGS.eewDuration;
             quakeDurationInput.value = CURRENT_SETTINGS.quakeDuration;
             
@@ -668,12 +677,17 @@
                 const option = document.createElement('option');
                 option.value = optionData.value;
                 option.textContent = optionData.label;
-                minIntensitySelect.appendChild(option);
+                minIntensitySelect.appendChild(option.cloneNode(true));
+                minIntensityTickerSelect.appendChild(option.cloneNode(true));
             });
             
             // UIイベントリスナーの設定 (表示設定)
             minIntensitySelect.addEventListener('change', (event) => {
                 saveSettings({ minIntensityScale: parseInt(event.target.value, 10) });
+            });
+            // テロップ最低震度のリスナーを追加
+            minIntensityTickerSelect.addEventListener('change', (event) => {
+                saveSettings({ minIntensityScaleTicker: parseInt(event.target.value, 10) });
             });
             eewDurationInput.addEventListener('change', (event) => {
                 const newValue = parseInt(event.target.value, 10);
@@ -1027,8 +1041,8 @@
             // 🚨 修正: 汎用メッセージでない場合、最低震度をチェックする
             if (!data.rawMessage) {
                 const maxInt = data.earthquake?.maxScale || 0;
-                if (maxInt < CURRENT_SETTINGS.minIntensityScale) {
-                    console.log(`テロップ表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScale)} 未満です。`);
+                if (maxInt < CURRENT_SETTINGS.minIntensityScaleTicker) {
+                    console.log(`テロップ表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScaleTicker)} 未満です。`);
                     return;
                 }
             }
@@ -1519,7 +1533,7 @@
             } else if (code === 552 || (code === 551 && !serial)) { // 地震情報、またはシリアル番号のないEEW
                 // 🚨 修正: ここでの直接呼び出しは震度チェックを showQuakeTicker 関数内で行う
                 const maxInt = data.earthquake?.maxScale || 0;
-                if (maxInt >= CURRENT_SETTINGS.minIntensityScale) {
+                if (maxInt >= CURRENT_SETTINGS.minIntensityScaleTicker) {
                     showQuakeTicker(data);
                     historyItem.displayed = true;
 
@@ -1531,7 +1545,7 @@
                     }
                 } else {
                     historyItem.displayed = false;
-                    console.log(`地震情報テロップの表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScale)} 未満です。`);
+                    console.log(`地震情報テロップの表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScaleTicker)} 未満です。`);
                 }
                 
             } else if (code === 556) { // 津波予報
