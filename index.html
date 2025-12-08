@@ -1762,31 +1762,39 @@
                 playAlarmForIntensity(maxInt);
 
             } else if (code === 556) { // 津波情報
-                detailText = data.issue.text || '詳細を確認してください';
+                // 修正: issue.text がなくても areas から詳細テキストを生成する
+                const areasText = data.areas?.map(a => a.name).join('、') || '';
+                detailText = data.issue?.text || (areasText ? `${areasText}に津波警報・注意報` : '詳細を確認してください');
+
                 let warningComment = ''; // 注意喚起コメント用の変数を追加
                 let textColorClass = 'text-white'; // 文字色のデフォルトは白
 
-                // 警報レベルに応じてタイトルと注意喚起コメントを動的に変更
-                if (detailText.includes('大津波警報')) {
+                // 修正: issue.text ではなく、areas 配列の grade を直接チェックする
+                const hasMajorWarning = data.areas?.some(a => a.grade === 'MajorWarning');
+                const hasWarning = data.areas?.some(a => a.grade === 'Warning');
+                const hasWatch = data.areas?.some(a => a.grade === 'Watch');
+
+                if (hasMajorWarning) {
                     alertTypeTitle = '大津波警報を発表';
                     warningComment = 'ただちに高台へ避難してください';
                     baseClass += ' bg-purple-800 border-purple-300'; // 背景色: 赤紫
                     playAlarmForTsunami('major');
-                } else if (detailText.includes('津波警報')) {
+                } else if (hasWarning) {
                     alertTypeTitle = '津波警報を発表';
                     warningComment = '海岸から離れてください';
                     baseClass += ' bg-red-700 border-red-300'; // 背景色: 赤
                     playAlarmForTsunami('warning');
-                } else if (detailText.includes('津波注意報')) {
+                } else if (hasWatch) {
                     alertTypeTitle = '津波注意報を発表';
                     warningComment = '海岸に近づかないでください';
                     baseClass += ' bg-yellow-500 border-yellow-200'; // 背景色: 黄色
                     textColorClass = 'text-black'; // 文字色: 黒
                     playAlarmForTsunami('advisory');
                 } else {
-                    alertTypeTitle = '津波情報'; // フォールバック
-                    warningComment = 'テレビ・ラジオで情報を確認してください';
-                    baseClass += ' bg-blue-600 border-blue-300'; // デフォルトの背景色: 青
+                    // isWarningがtrueでここに来ることはないはずだが、念のためフォールバック
+                    alertTypeTitle = '津波情報'; 
+                    warningComment = 'テレビ・ラジオで情報を確認';
+                    baseClass += ' bg-blue-600 border-blue-300';
                 }
                 titleText = warningComment; // 小さい方のタイトルを注意喚起コメントに置き換え
                 baseClass += ` animation-none ${textColorClass}`; // アニメーションなしと文字色クラスを追加
@@ -1870,8 +1878,14 @@
             } else if (code === 556) { // 津波予報
                 historyItem.type = 'TsunamiInfo';
                 const text = data.issue?.text || '';
-                const isWarning = text.includes('津波警報') || text.includes('大津波警報') || text.includes('津波注意報');
                 const isCancelled = text.includes('解除');
+
+                // 修正: issue.text ではなく、areas 配列の grade を直接チェックする
+                const isWarning = data.areas?.some(area => 
+                    area.grade === 'MajorWarning' || // 大津波警報
+                    area.grade === 'Warning' ||      // 津波警報
+                    area.grade === 'Watch'           // 津波注意報
+                ) || false;
 
                 // 詳細テロップ用の情報を作成
                 let detailTickerText = '';
