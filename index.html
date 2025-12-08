@@ -317,6 +317,65 @@
             </div>
         </div>
 
+        <!-- 🌊 津波関連アラーム音設定グループ 🌊 -->
+        <div class="flex flex-col bg-blue-900 rounded-lg mb-4 border border-blue-400 p-3">
+            <!-- ヘッダー (クリックで展開/折りたたみ) -->
+            <button id="toggle-tsunami-alarm" class="toggle-header flex items-center w-full text-sm font-semibold text-blue-300 border-blue-700 hover:text-white transition">
+                <span id="tsunami-alarm-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
+                <span>津波関連アラーム音設定</span>
+            </button>
+
+            <!-- 折りたたみ可能なコンテンツ -->
+            <div id="tsunami-alarm-content" class="collapsible-content">
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">大津波警報:</label>
+                    <select id="sound-for-tsunami-major" class="p-1 rounded text-sm w-36 bg-blue-800 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">津波警報:</label>
+                    <select id="sound-for-tsunami-warning" class="p-1 rounded text-sm w-36 bg-blue-800 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">津波注意報:</label>
+                    <select id="sound-for-tsunami-advisory" class="p-1 rounded text-sm w-36 bg-blue-800 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+                <div class="flex items-center justify-between">
+                    <label class="text-white text-sm font-medium">警報解除:</label>
+                    <select id="sound-for-tsunami-cancelled" class="p-1 rounded text-sm w-36 bg-blue-800 text-white focus:ring-yellow-500 focus:border-yellow-500" onload="this.innerHTML = soundOptions">
+                        <script>document.write(soundOptions)</script>
+                    </select>
+                </div>
+                <!-- 津波専用URL音源設定 -->
+                <div class="flex flex-col gap-1 p-2 mt-2 bg-blue-800 rounded-lg border border-blue-500">
+                    <p class="text-xs font-bold text-blue-300">↓ 各警報専用の音源URL (優先再生)</p>
+                    <div class="flex flex-col gap-1 text-xs">
+                        <input type="text" id="tsunami-url-major" placeholder="大津波警報 URL (mp3/wav)" class="p-1 rounded w-full bg-blue-700 text-white placeholder-gray-400">
+                        <p id="tsunami-url-major-status" class="loading-status text-yellow-500">未設定</p>
+                    </div>
+                     <div class="flex flex-col gap-1 text-xs mt-1">
+                        <input type="text" id="tsunami-url-warning" placeholder="津波警報 URL (mp3/wav)" class="p-1 rounded w-full bg-blue-700 text-white placeholder-gray-400">
+                        <p id="tsunami-url-warning-status" class="loading-status text-yellow-500">未設定</p>
+                    </div>
+                     <div class="flex flex-col gap-1 text-xs mt-1">
+                        <input type="text" id="tsunami-url-advisory" placeholder="津波注意報 URL (mp3/wav)" class="p-1 rounded w-full bg-blue-700 text-white placeholder-gray-400">
+                        <p id="tsunami-url-advisory-status" class="loading-status text-yellow-500">未設定</p>
+                    </div>
+                     <div class="flex flex-col gap-1 text-xs mt-1">
+                        <input type="text" id="tsunami-url-cancelled" placeholder="警報解除 URL (mp3/wav)" class="p-1 rounded w-full bg-blue-700 text-white placeholder-gray-400">
+                        <p id="tsunami-url-cancelled-status" class="loading-status text-yellow-500">未設定</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 3. 🎵 カスタムアラーム音の設定グループ 🎶 -->
         <div class="flex flex-col p-3 bg-gray-800 rounded-lg mb-4 border border-gray-600">
             <!-- ヘッダー (クリックで展開/折りたたみ) - アイコンを統合 -->
@@ -441,6 +500,25 @@
         const soundForInt5El = document.getElementById('sound-for-int5');
         const soundForInt6El = document.getElementById('sound-for-int6');
 
+        // 🌊 津波アラーム設定要素 🌊
+        const toggleTsunamiAlarm = document.getElementById('toggle-tsunami-alarm');
+        const tsunamiAlarmContent = document.getElementById('tsunami-alarm-content');
+        const tsunamiAlarmIcon = document.getElementById('tsunami-alarm-icon');
+        const soundForTsunamiMajorEl = document.getElementById('sound-for-tsunami-major');
+        const soundForTsunamiWarningEl = document.getElementById('sound-for-tsunami-warning');
+        const soundForTsunamiAdvisoryEl = document.getElementById('sound-for-tsunami-advisory');
+        const soundForTsunamiCancelledEl = document.getElementById('sound-for-tsunami-cancelled');
+        // 津波専用URL音源要素
+        const tsunamiUrlMajorInput = document.getElementById('tsunami-url-major');
+        const tsunamiUrlMajorStatus = document.getElementById('tsunami-url-major-status');
+        const tsunamiUrlWarningInput = document.getElementById('tsunami-url-warning');
+        const tsunamiUrlWarningStatus = document.getElementById('tsunami-url-warning-status');
+        const tsunamiUrlAdvisoryInput = document.getElementById('tsunami-url-advisory');
+        const tsunamiUrlAdvisoryStatus = document.getElementById('tsunami-url-advisory-status');
+        const tsunamiUrlCancelledInput = document.getElementById('tsunami-url-cancelled');
+        const tsunamiUrlCancelledStatus = document.getElementById('tsunami-url-cancelled-status');
+
+
         // 🎵 カスタムアラーム設定要素 🎶
         const customAlarmToggle = document.getElementById('toggle-custom-alarm');
         const customAlarmContent = document.getElementById('custom-alarm-content');
@@ -501,7 +579,23 @@
                 int6_up: 'urgent_siren'    
             },
             
-            // 🎵 カスタムトーンのデフォルトパラメータ 🎶
+            // 🌊 津波関連アラーム音設定のデフォルト
+            tsunamiSoundMap: {
+                major: 'urgent_siren',
+                warning: 'classic_eew',
+                advisory: 'simple_beep',
+                cancelled: 'silent'
+            },
+
+            // 🌊 津波関連の専用音源URL設定のデフォルト 🌊
+            tsunamiSoundUrls: {
+                major: '', // 例: 'https://example.com/major_warning.mp3'
+                warning: '', // 例: 'https://example.com/warning.mp3'
+                advisory: '', // 例: 'https://example.com/advisory.mp3'
+                cancelled: '' // 例: 'https://example.com/cancelled.mp3'
+            },
+
+            //  カスタムトーンのデフォルトパラメータ 🎶
             customTones: {
                 custom_a: {
                     baseFreq: 880,  // Hz (基準周波数 - A)
@@ -523,6 +617,7 @@
             // UIの折りたたみ状態のデフォルト
             uiState: {
                 isIntensityAlarmExpanded: false,
+                isTsunamiAlarmExpanded: false,
                 isCustomAlarmExpanded: false,
                 isHistoryExpanded: true // 履歴はデフォルトで開いておく
             }
@@ -548,6 +643,14 @@
                 eewSoundMap: {
                     ...CURRENT_SETTINGS.eewSoundMap,
                     ...(newSettings.eewSoundMap || {})
+                },
+                tsunamiSoundMap: {
+                    ...CURRENT_SETTINGS.tsunamiSoundMap,
+                    ...(newSettings.tsunamiSoundMap || {})
+                },
+                tsunamiSoundUrls: {
+                    ...CURRENT_SETTINGS.tsunamiSoundUrls,
+                    ...(newSettings.tsunamiSoundUrls || {})
                 },
                 customTones: {
                     ...CURRENT_SETTINGS.customTones,
@@ -586,6 +689,14 @@
                         eewSoundMap: {
                             ...DEFAULT_SETTINGS.eewSoundMap,
                             ...(loaded.eewSoundMap || {})
+                        },
+                        tsunamiSoundMap: {
+                            ...DEFAULT_SETTINGS.tsunamiSoundMap,
+                            ...(loaded.tsunamiSoundMap || {})
+                        },
+                        tsunamiSoundUrls: {
+                            ...DEFAULT_SETTINGS.tsunamiSoundUrls,
+                            ...(loaded.tsunamiSoundUrls || {})
                         },
                         customTones: {
                             ...DEFAULT_SETTINGS.customTones,
@@ -629,6 +740,18 @@
             soundForInt4El.value = CURRENT_SETTINGS.eewSoundMap.int4_down;
             soundForInt5El.value = CURRENT_SETTINGS.eewSoundMap.int5_mid;
             soundForInt6El.value = CURRENT_SETTINGS.eewSoundMap.int6_up;
+
+            // 🌊 津波アラーム音設定をUIに適用 🌊
+            soundForTsunamiMajorEl.value = CURRENT_SETTINGS.tsunamiSoundMap.major;
+            soundForTsunamiWarningEl.value = CURRENT_SETTINGS.tsunamiSoundMap.warning;
+            soundForTsunamiAdvisoryEl.value = CURRENT_SETTINGS.tsunamiSoundMap.advisory;
+            soundForTsunamiCancelledEl.value = CURRENT_SETTINGS.tsunamiSoundMap.cancelled;
+
+            // 🌊 津波専用URL音源設定をUIに適用 🌊
+            tsunamiUrlMajorInput.value = CURRENT_SETTINGS.tsunamiSoundUrls.major;
+            tsunamiUrlWarningInput.value = CURRENT_SETTINGS.tsunamiSoundUrls.warning;
+            tsunamiUrlAdvisoryInput.value = CURRENT_SETTINGS.tsunamiSoundUrls.advisory;
+            tsunamiUrlCancelledInput.value = CURRENT_SETTINGS.tsunamiSoundUrls.cancelled;
             
             // 🎵 カスタムトーン (シンセ音) 設定をUIに適用 🎶
             const customA = CURRENT_SETTINGS.customTones.custom_a;
@@ -644,10 +767,12 @@
             
             // UIの折りたたみ状態を適用
             applyCollapsibleState(intensityAlarmContent, intensityAlarmIcon, CURRENT_SETTINGS.uiState.isIntensityAlarmExpanded);
+            applyCollapsibleState(tsunamiAlarmContent, tsunamiAlarmIcon, CURRENT_SETTINGS.uiState.isTsunamiAlarmExpanded);
             applyCollapsibleState(customAlarmContent, customAlarmIcon, CURRENT_SETTINGS.uiState.isCustomAlarmExpanded);
             applyCollapsibleState(historyContentEl, historyIconEl, CURRENT_SETTINGS.uiState.isHistoryExpanded);
         }
         
+
         /** 折りたたみ要素の展開状態を適用するヘルパー関数 */
         function applyCollapsibleState(contentEl, iconEl, isExpanded) {
             if (isExpanded) {
@@ -714,6 +839,42 @@
             soundForInt4El.addEventListener('change', updateSoundMap);
             soundForInt5El.addEventListener('change', updateSoundMap);
             soundForInt6El.addEventListener('change', updateSoundMap);
+
+            // 🌊 津波アラーム音設定のリスナー 🌊
+            const updateTsunamiSoundMap = () => {
+                const newMap = {
+                    major: soundForTsunamiMajorEl.value,
+                    warning: soundForTsunamiWarningEl.value,
+                    advisory: soundForTsunamiAdvisoryEl.value,
+                    cancelled: soundForTsunamiCancelledEl.value,
+                };
+                saveSettings({ tsunamiSoundMap: newMap });
+            };
+            soundForTsunamiMajorEl.addEventListener('change', updateTsunamiSoundMap);
+            soundForTsunamiWarningEl.addEventListener('change', updateTsunamiSoundMap);
+            soundForTsunamiAdvisoryEl.addEventListener('change', updateTsunamiSoundMap);
+            soundForTsunamiCancelledEl.addEventListener('change', updateTsunamiSoundMap);
+
+            // 🌊 津波専用URL音源のリスナー 🌊
+            const handleTsunamiUrlChange = (inputEl, statusEl, key) => {
+                inputEl.addEventListener('change', (event) => {
+                    const newUrl = event.target.value.trim();
+                    statusEl.textContent = 'ロード中...';
+                    statusEl.classList.remove('text-green-500', 'text-red-500');
+                    statusEl.classList.add('text-yellow-500');
+
+                    const update = {};
+                    update[key] = newUrl;
+                    
+                    saveSettings({ tsunamiSoundUrls: update }); 
+                    
+                    loadAudioFromUrl(`tsunami_${key}`, newUrl, statusEl);
+                });
+            };
+            handleTsunamiUrlChange(tsunamiUrlMajorInput, tsunamiUrlMajorStatus, 'major');
+            handleTsunamiUrlChange(tsunamiUrlWarningInput, tsunamiUrlWarningStatus, 'warning');
+            handleTsunamiUrlChange(tsunamiUrlAdvisoryInput, tsunamiUrlAdvisoryStatus, 'advisory');
+            handleTsunamiUrlChange(tsunamiUrlCancelledInput, tsunamiUrlCancelledStatus, 'cancelled');
             
             // 🎵 カスタムトーン (シンセ音) 設定のリスナー 🎶
             const setupCustomToneListener = (inputEl, toneKey, propName) => {
@@ -767,6 +928,13 @@
                 const isExpanded = intensityAlarmContent.classList.toggle('expanded');
                 applyCollapsibleState(intensityAlarmContent, intensityAlarmIcon, isExpanded);
                 saveSettings({ uiState: { isIntensityAlarmExpanded: isExpanded } });
+            });
+
+            // 津波アラーム設定のトグル機能
+            toggleTsunamiAlarm.addEventListener('click', () => {
+                const isExpanded = tsunamiAlarmContent.classList.toggle('expanded');
+                applyCollapsibleState(tsunamiAlarmContent, tsunamiAlarmIcon, isExpanded);
+                saveSettings({ uiState: { isTsunamiAlarmExpanded: isExpanded } });
             });
 
             // カスタムアラーム設定のトグル機能
@@ -825,12 +993,12 @@
         function renderHistoryList() {
             historyListEl.innerHTML = ''; // リストをクリア
             
-            receivedHistory.forEach(item => {
+            receivedHistory.slice().reverse().forEach(item => { // 新しいものが下に表示されるように逆順にする
                 const li = document.createElement('li');
                 li.className = `history-item ${item.displayed ? 'displayed' : 'skipped'}`;
                 
                 // 発生日時を年月日時分秒で表示
-                const timeStr = new Date(item.time).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+                const timeStr = new Date(item.time).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 const displayStatus = item.displayed ? '表示' : 'スキップ';
                 
                 let infoText = '';
@@ -850,7 +1018,7 @@
                     </div>
                     <p class="text-gray-300 mt-0.5">${infoText}</p>
                 `;
-                historyListEl.appendChild(li);
+                historyListEl.prepend(li); // 新しい項目をリストの先頭に追加
             });
         }
 
@@ -891,11 +1059,12 @@
         // ユーティリティ関数
         // ----------------------------------------------------
         function intensityToJma(num) {
+            if (num < 10) return '1未満'; // 震度1未満の判定を追加
             const map = {
                 10: '1', 20: '2', 30: '3', 40: '4', 45: '5弱',
                 50: '5強', 55: '6弱', 60: '6強', 70: '7'
             };
-            return map[num] || '不明';
+            return map[num] || '不明'; // 10以上でマップにない場合は不明
         }
         
         /**
@@ -1216,6 +1385,24 @@
                 'custom_url_a': customUrlAStatus,
                 'custom_url_b': customUrlBStatus
             };
+            const tsunamiUrls = CURRENT_SETTINGS.tsunamiSoundUrls;
+            const tsunamiStatusMap = {
+                'major': tsunamiUrlMajorStatus,
+                'warning': tsunamiUrlWarningStatus,
+                'advisory': tsunamiUrlAdvisoryStatus,
+                'cancelled': tsunamiUrlCancelledStatus
+            };
+
+            // 津波専用URLのロード
+            for (const key in tsunamiUrls) {
+                const url = tsunamiUrls[key];
+                const statusEl = tsunamiStatusMap[key];
+                if (url) {
+                    loadAudioFromUrl(`tsunami_${key}`, url, statusEl);
+                } else if (statusEl) {
+                    statusEl.textContent = '未設定';
+                }
+            }
 
             for (const key in urls) {
                 const url = urls[key];
@@ -1288,10 +1475,70 @@
         }
 
         /**
+         * 🌊 津波の警報種別に応じたアラーム音を再生する 🌊
+         * @param {'major' | 'warning' | 'advisory' | 'cancelled'} tsunamiType - 津波警報の種別
+         */
+        function playAlarmForTsunami(tsunamiType) {
+            initializeAudioContext();
+            if (!audioContext) {
+                console.error("AudioContextが利用できません。");
+                return;
+            }
+
+            // 1. 専用URL音源の再生を試みる
+            const urlKey = `tsunami_${tsunamiType}`;
+            const buffer = audioBuffers[urlKey];
+            if (buffer) {
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+                console.log(`津波専用URL音源 (${urlKey}) を再生しました。`);
+                return; // 専用音源を再生したらここで終了
+            }
+
+            // 2. 専用URL音源がない場合、フォールバックとして<select>で設定された音を再生
+            const fallbackAlarmType = CURRENT_SETTINGS.tsunamiSoundMap[tsunamiType] || 'silent';
+
+            if (fallbackAlarmType === 'silent') {
+                console.log(`津波アラーム (${tsunamiType}) は設定によりミュートされています。`);
+                return;
+            }
+            
+            console.log(`津波専用URL音源(${urlKey})が見つからないため、フォールバック音源(${fallbackAlarmType})を再生します。`);
+            
+            // フォールバック音源がカスタムURL音源(A/B)の場合も考慮
+            if (fallbackAlarmType.startsWith('custom_url_')) {
+                playCustomUrlSound(fallbackAlarmType);
+            } else {
+                playSynthesizedAlarm(fallbackAlarmType);
+            }
+        }
+
+        /**
          * シンセサイザー音（EEW標準、サイレン、カスタムトーン）を再生する
          * @param {string} alarmType - 再生するアラームの種類
          */
         function playSynthesizedAlarm(alarmType) {
+            
+            // ----------------------------------------------------
+            // 🔊 URL音源の再生ロジック (汎用カスタムURL A/B) 🔊
+            // ----------------------------------------------------
+            if (alarmType.startsWith('custom_url_')) {
+                playCustomUrlSound(alarmType);
+                return; // URL音源の再生が試行されたらここで終了
+            }
+            
+            // ----------------------------------------------------
+            // 🎵 シンセサイザー音の再生ロジック 🎶
+            // ----------------------------------------------------
+            playSynth(alarmType);
+        }
+
+        /**
+         * シンセサイザー音を再生する内部関数
+         */
+        function playSynth(alarmType) {
             
             if (!audioContext) { return; }
             
@@ -1377,6 +1624,24 @@
             console.log(`シンセサイザーアラーム音を再生しました (${alarmType}、合計 ${totalDuration.toFixed(2)} 秒)。`);
         }
 
+        /**
+         * 汎用のカスタムURL音源 (A/B) を再生する
+         */
+        function playCustomUrlSound(alarmType) {
+            const buffer = audioBuffers[alarmType];
+            if (buffer) {
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+                console.log(`URL音源 (${alarmType}) を再生しました。`);
+            } else {
+                console.error(`${alarmType}: 音声バッファがロードされていないか、ロードに失敗しています。デフォルトのEEW音を再生します。`);
+                // ロード失敗時はフォールバックとしてEEW標準音を再生
+                playSynth('classic_eew'); 
+            }
+        }
+
         // ----------------------------------------------------
         // 🚨 メインロジック (EEW処理、続報、タイマー) 🚨
         // ----------------------------------------------------
@@ -1388,24 +1653,26 @@
         
         /** EEWアラート要素のコンテンツを更新する (551 続報用) */
         function updateAlertElementContent(element, data) {
-            const code = data.code;
             const maxInt = data.earthquake?.maxScale || 0;
-            const time = new Date(data.time || Date.now()).toLocaleTimeString('ja-JP');
             const maxIntText = intensityToJma(maxInt);
             const serial = data.issue?.serial;
             
-            // ... (HTML更新ロジック)
+            // 震源地とマグニチュードの情報（欠損時は「調査中」）
+            const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+            const magnitude = data.earthquake?.magnitude || '調査中';
+
+            // HTML更新ロジック
             element.className = 'eew-alert'; 
             if (maxInt >= 55) { element.className += ' intensity-6-up'; } 
             else if (maxInt >= 45) { element.className += ' intensity-5-up'; } 
             else if (maxInt >= 30) { element.className += ' intensity-3-up'; }
 
             element.querySelector('.text-xl.mt-1').textContent = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（続報）`;
-            element.querySelector('.text-lg.mt-1').textContent = `震源地: ${data.earthquake.hypocenter?.name || '不明'} | 予想最大震度: ${maxIntText} (${data.earthquake?.magnitude || '不明'}M)`;
+            element.querySelector('.text-lg.mt-1').textContent = `震源地: ${epicenterName} | 予想最大震度: ${maxIntText} (${magnitude}M)`;
             element.querySelector('.intensity-label').textContent = maxIntText;
             
             // 続報でもアラームを鳴らす
-            if (code === 551) {
+            if (data.code === 551) {
                 playAlarmForIntensity(maxInt);
             }
             
@@ -1418,15 +1685,13 @@
             const maxInt = data.earthquake?.maxScale || 0;
             const serial = data.issue?.serial || `alert-${Date.now()}`;
 
-            // 🚨 修正: 最小震度設定による表示制御
-            if (code === 551 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
-                // 修正: なぜ表示されないのかをコンソールに明確に出力する
+            // 🚨 修正: 震度5弱以上は強制表示。それ未満は設定に従う
+            if (code === 551 && maxInt < 45 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
                 const minIntensityLabel = intensityToJma(CURRENT_SETTINGS.minIntensityScale);
                 console.log(`EEW受信: 最大震度 ${intensityToJma(maxInt)}。設定された最低震度「${minIntensityLabel}」未満のため、アラート表示をスキップしました。`);
                 return; // ここで処理を終了
             }
 
-            const time = new Date(data.time || Date.now()).toLocaleTimeString('ja-JP');
             let maxIntText = intensityToJma(maxInt);
             let titleText = '';
             let detailText = '';
@@ -1437,7 +1702,11 @@
 
             if (code === 551) { // 緊急地震速報 (EEW)
                 titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（新規）`;
-                detailText = `震源地: ${data.earthquake.hypocenter?.name || '不明'} | 予想最大震度: ${maxIntText} (${data.earthquake?.magnitude || '不明'}M)`;
+                // 震源地とマグニチュードの情報（欠損時は「調査中」）
+                const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+                const magnitude = data.earthquake?.magnitude || '調査中';
+                detailText = `震源地: ${epicenterName} | 予想最大震度: ${maxIntText} (${magnitude}M)`;
+
                 alertTypeTitle = '緊急地震速報';
                 intensityDisplayHtml = `<p class="intensity-unit">最大震度</p><p class="intensity-label">${maxIntText}</p>`;
                 
@@ -1448,7 +1717,7 @@
                 // 新規EEW発生時にアラーム音を鳴らす
                 playAlarmForIntensity(maxInt);
 
-            } else if (code === 556) { // 津波情報 (音は鳴らさない)
+            } else if (code === 556) { // 津波情報
                 detailText = data.issue.text || '詳細を確認してください';
                 let warningComment = ''; // 注意喚起コメント用の変数を追加
                 let textColorClass = 'text-white'; // 文字色のデフォルトは白
@@ -1458,15 +1727,18 @@
                     alertTypeTitle = '大津波警報を発表';
                     warningComment = 'ただちに高台へ避難してください';
                     baseClass += ' bg-purple-800 border-purple-300'; // 背景色: 赤紫
+                    playAlarmForTsunami('major');
                 } else if (detailText.includes('津波警報')) {
                     alertTypeTitle = '津波警報を発表';
                     warningComment = '海岸から離れてください';
                     baseClass += ' bg-red-700 border-red-300'; // 背景色: 赤
+                    playAlarmForTsunami('warning');
                 } else if (detailText.includes('津波注意報')) {
                     alertTypeTitle = '津波注意報を発表';
                     warningComment = '海岸に近づかないでください';
                     baseClass += ' bg-yellow-500 border-yellow-200'; // 背景色: 黄色
                     textColorClass = 'text-black'; // 文字色: 黒
+                    playAlarmForTsunami('advisory');
                 } else {
                     alertTypeTitle = '津波情報'; // フォールバック
                     warningComment = 'テレビ・ラジオで情報を確認してください';
@@ -1513,7 +1785,9 @@
             // 履歴用の情報を先に準備
             const historyItem = {
                 time: data.time || new Date().toISOString(),
-                epicenter: data.earthquake?.hypocenter?.name || '不明',
+                // 修正: issue.textが存在すれば、それを優先的にepicenterとして使用する
+                // これにより、取消報などのテキスト情報も履歴に残る
+                epicenter: data.issue?.text || data.earthquake?.hypocenter?.name || '不明',
                 maxInt: data.earthquake?.maxScale || 0,
                 maxIntText: intensityToJma(data.earthquake?.maxScale || 0),
                 displayed: false, // デフォルトは非表示
@@ -1584,6 +1858,7 @@
                     // 解除報を受信したら、表示中のすべての津波アラートを削除
                     document.querySelectorAll('[data-alert-type="tsunami"]').forEach(el => el.remove());
                     hideTsunamiTicker();
+                    playAlarmForTsunami('cancelled');
                     console.log('津波警報の解除報を受信したため、関連アラートを非表示にしました。');
                     historyItem.displayed = true; // 解除も重要な情報なので表示扱い
                 } else if (isWarning) {
@@ -1598,7 +1873,7 @@
 
             // 表示判定ロジック (createAlertElement内で行われるため、ここで再判定)
             if (code === 551) {
-                if (historyItem.maxInt >= CURRENT_SETTINGS.minIntensityScale) {
+                if (historyItem.maxInt >= 45 || historyItem.maxInt >= CURRENT_SETTINGS.minIntensityScale) {
                     historyItem.displayed = true;
                 }
             }
