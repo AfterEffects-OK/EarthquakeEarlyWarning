@@ -244,29 +244,36 @@
         <h2 class="text-white text-xl font-bold mb-4 border-b border-gray-700 pb-2">EEW オーバーレイ設定<br> (Local Storage)</h2>
 
         <!-- 1. 表示設定グループ -->
-        <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg mb-4">
-            <p class="text-sm font-semibold text-gray-300 w-full border-b border-gray-700 pb-1 mb-1">▶ 表示・アニメーション設定</p>
-            
-            <div class="flex items-center justify-between">
-                <!-- 修正箇所 -->
-                <label for="min-intensity" class="text-white text-sm font-medium whitespace-nowrap">EEW表示最低震度:</label>
-                <select id="min-intensity" class="p-1 rounded text-sm w-28 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
-                    <!-- オプションはJavaScriptで設定 -->
-                </select>
-            </div>
-            <div class="flex items-center justify-between">
-                <label for="min-intensity-ticker" class="text-white text-sm font-medium whitespace-nowrap">ロール表示最低震度:</label>
-                <select id="min-intensity-ticker" class="p-1 rounded text-sm w-28 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
-                    <!-- オプションはJavaScriptで設定 -->
-                </select>
-            </div>
-            <div class="flex items-center justify-between">
-                <label for="eew-duration" class="text-white text-sm font-medium whitespace-nowrap">EEWアラート時間(秒):</label>
-                <input type="number" id="eew-duration" min="5" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
-            </div>
-            <div class="flex items-center justify-between">
-                <label for="quake-duration" class="text-white text-sm font-medium whitespace-nowrap">情報スクロール(秒):</label>
-                <input type="number" id="quake-duration" min="10" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+        <div class="flex flex-col p-3 bg-gray-800 rounded-lg mb-4">
+            <!-- ヘッダー (クリックで展開/折りたたみ) -->
+            <button id="toggle-display-settings" class="toggle-header flex items-center w-full text-sm font-semibold text-gray-300 border-gray-700 hover:text-white transition">
+                <span id="display-settings-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
+                <span>表示・アニメーション設定</span>
+            </button>
+
+            <!-- 折りたたみ可能なコンテンツ -->
+            <div id="display-settings-content" class="collapsible-content">
+                <div class="flex items-center justify-between">
+                    <!-- 修正箇所 -->
+                    <label for="min-intensity" class="text-white text-sm font-medium whitespace-nowrap">EEW表示最低震度:</label>
+                    <select id="min-intensity" class="p-1 rounded text-sm w-28 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                        <!-- オプションはJavaScriptで設定 -->
+                    </select>
+                </div>
+                <div class="flex items-center justify-between">
+                    <label for="min-intensity-ticker" class="text-white text-sm font-medium whitespace-nowrap">ロール表示最低震度:</label>
+                    <select id="min-intensity-ticker" class="p-1 rounded text-sm w-28 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                        <!-- オプションはJavaScriptで設定 -->
+                    </select>
+                </div>
+                <div class="flex items-center justify-between">
+                    <label for="eew-duration" class="text-white text-sm font-medium whitespace-nowrap">EEWアラート時間(秒):</label>
+                    <input type="number" id="eew-duration" min="5" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                </div>
+                <div class="flex items-center justify-between">
+                    <label for="quake-duration" class="text-white text-sm font-medium whitespace-nowrap">情報スクロール(秒):</label>
+                    <input type="number" id="quake-duration" min="10" max="300" class="p-1 rounded text-sm w-20 bg-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 text-right">
+                </div>
             </div>
         </div>
         
@@ -451,26 +458,34 @@
         </div>
 
         <!-- 4. テストグループ -->
-        <div class="flex flex-col gap-2 p-3 bg-gray-800 rounded-lg">
-            <p class="text-sm font-semibold text-gray-300 w-full border-b border-gray-700 pb-1 mb-1">▶ テスト/ユーティリティ</p>
-            <div class="grid grid-cols-2 gap-2">
-                <!-- 続報テスト用グループA -->
-                <button id="test-eew-5weak-a" class="px-2 py-1 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition duration-150 text-sm shadow-md">
-                    <span class="test-button-label">震度5弱<br>（新規EEW）</span>
-                </button>
-                <button id="test-eew-6strong-a" class="px-2 py-1 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-800 transition duration-150 text-sm shadow-md">
-                    <span class="test-button-label">震度6強<br>（EEW続報）</span>
-                </button>
-                <button id="test-quake-3" class="px-2 py-1 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition duration-150 text-sm shadow-md">地震情報<br>テロップ</button>
-                <button id="test-sound" class="px-2 py-1 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-150 text-sm shadow-md">アラーム音<br>テスト</button>
-                <button id="test-tsunami-advisory" class="px-2 py-1 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 text-sm shadow-md">
-                    <span class="test-button-label">津波注意報<br>テスト</span>
-                </button>
-                <button id="test-tsunami-major-warning" class="px-2 py-1 bg-purple-800 text-white font-semibold rounded-lg hover:bg-purple-900 transition duration-150 text-sm shadow-md">
-                    <span class="test-button-label">大津波警報<br>テスト</span>
-                </button>
+        <div class="flex flex-col p-3 bg-gray-800 rounded-lg">
+            <!-- ヘッダー (クリックで展開/折りたたみ) -->
+            <button id="toggle-test-utility" class="toggle-header flex items-center w-full text-sm font-semibold text-gray-300 border-gray-700 hover:text-white transition">
+                <span id="test-utility-icon" class="text-base mr-2 transform transition-transform duration-300">▶</span>
+                <span>テスト/ユーティリティ</span>
+            </button>
+            
+            <!-- 折りたたみ可能なコンテンツ -->
+            <div id="test-utility-content" class="collapsible-content">
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- 続報テスト用グループA -->
+                    <button id="test-eew-5weak-a" class="px-2 py-1 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition duration-150 text-sm shadow-md">
+                        <span class="test-button-label">震度5弱<br>（新規EEW）</span>
+                    </button>
+                    <button id="test-eew-6strong-a" class="px-2 py-1 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-800 transition duration-150 text-sm shadow-md">
+                        <span class="test-button-label">震度6強<br>（EEW続報）</span>
+                    </button>
+                    <button id="test-quake-3" class="px-2 py-1 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition duration-150 text-sm shadow-md">地震情報<br>テロップ</button>
+                    <button id="test-sound" class="px-2 py-1 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-150 text-sm shadow-md">アラーム音<br>テスト</button>
+                    <button id="test-tsunami-advisory" class="px-2 py-1 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 text-sm shadow-md">
+                        <span class="test-button-label">津波注意報<br>テスト</span>
+                    </button>
+                    <button id="test-tsunami-major-warning" class="px-2 py-1 bg-purple-800 text-white font-semibold rounded-lg hover:bg-purple-900 transition duration-150 text-sm shadow-md">
+                        <span class="test-button-label">大津波警報<br>テスト</span>
+                    </button>
+                </div>
+                <button id="clear-alert" class="w-full px-2 py-1 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-150 text-sm shadow-md mt-2">すべてのアラートを非表示</button>
             </div>
-            <button id="clear-alert" class="w-full px-2 py-1 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-150 text-sm shadow-md mt-2">すべてのアラートを非表示</button>
         </div>
     </div>
     <!-- テスト用コントロールパネル 終了 -->
@@ -492,6 +507,12 @@
         const toggleSettingsButton = document.getElementById('toggle-settings');
         const testControls = document.getElementById('test-controls');
         
+        // 1. 表示設定の要素
+        const toggleDisplaySettings = document.getElementById('toggle-display-settings');
+        const displaySettingsContent = document.getElementById('display-settings-content');
+        const displaySettingsIcon = document.getElementById('display-settings-icon');
+
+
         // 🚨 震度別アラーム設定要素 🚨
         const toggleIntensityAlarm = document.getElementById('toggle-intensity-alarm');
         const intensityAlarmContent = document.getElementById('intensity-alarm-content');
@@ -551,6 +572,11 @@
         const testTsunamiMajorWarning = document.getElementById('test-tsunami-major-warning');
         const testSoundButton = document.getElementById('test-sound'); 
         const clearAlertButton = document.getElementById('clear-alert');
+        
+        // 4. テスト/ユーティリティの要素
+        const toggleTestUtility = document.getElementById('toggle-test-utility');
+        const testUtilityContent = document.getElementById('test-utility-content');
+        const testUtilityIcon = document.getElementById('test-utility-icon');
 
         // 津波警報の状態を管理する変数
         let activeTsunamiInfo = null;
@@ -616,10 +642,12 @@
             
             // UIの折りたたみ状態のデフォルト
             uiState: {
+                isDisplaySettingsExpanded: false,
                 isIntensityAlarmExpanded: false,
                 isTsunamiAlarmExpanded: false,
                 isCustomAlarmExpanded: false,
-                isHistoryExpanded: true // 履歴はデフォルトで開いておく
+                isHistoryExpanded: true, // 履歴はデフォルトで開いておく
+                isTestUtilityExpanded: false
             }
         };
 
@@ -766,10 +794,12 @@
             customUrlBInput.value = CURRENT_SETTINGS.customUrls.custom_url_b;
             
             // UIの折りたたみ状態を適用
+            applyCollapsibleState(displaySettingsContent, displaySettingsIcon, CURRENT_SETTINGS.uiState.isDisplaySettingsExpanded);
             applyCollapsibleState(intensityAlarmContent, intensityAlarmIcon, CURRENT_SETTINGS.uiState.isIntensityAlarmExpanded);
             applyCollapsibleState(tsunamiAlarmContent, tsunamiAlarmIcon, CURRENT_SETTINGS.uiState.isTsunamiAlarmExpanded);
             applyCollapsibleState(customAlarmContent, customAlarmIcon, CURRENT_SETTINGS.uiState.isCustomAlarmExpanded);
             applyCollapsibleState(historyContentEl, historyIconEl, CURRENT_SETTINGS.uiState.isHistoryExpanded);
+            applyCollapsibleState(testUtilityContent, testUtilityIcon, CURRENT_SETTINGS.uiState.isTestUtilityExpanded);
         }
         
 
@@ -807,6 +837,13 @@
                 minIntensityTickerSelect.appendChild(option.cloneNode(true));
             });
             
+            // 表示設定のトグル機能
+            toggleDisplaySettings.addEventListener('click', () => {
+                const isExpanded = displaySettingsContent.classList.toggle('expanded');
+                applyCollapsibleState(displaySettingsContent, displaySettingsIcon, isExpanded);
+                saveSettings({ uiState: { isDisplaySettingsExpanded: isExpanded } });
+            });
+
             // UIイベントリスナーの設定 (表示設定)
             minIntensitySelect.addEventListener('change', (event) => {
                 saveSettings({ minIntensityScale: parseInt(event.target.value, 10) });
@@ -950,6 +987,13 @@
                 const isExpanded = historyContentEl.classList.toggle('expanded');
                 applyCollapsibleState(historyContentEl, historyIconEl, isExpanded);
                 saveSettings({ uiState: { isHistoryExpanded: isExpanded } });
+            });
+            
+            // テスト/ユーティリティのトグル機能
+            toggleTestUtility.addEventListener('click', () => {
+                const isExpanded = testUtilityContent.classList.toggle('expanded');
+                applyCollapsibleState(testUtilityContent, testUtilityIcon, isExpanded);
+                saveSettings({ uiState: { isTestUtilityExpanded: isExpanded } });
             });
 
             // 設定パネルのトグル機能
