@@ -1150,16 +1150,18 @@
         }
         
         /** 🚨 EEWのアラートがタイマーで消えた後にテロップ表示をスケジュールする 🚨 */
-        function scheduleQuakeTickerAfterEEW() {
+        function scheduleQuakeTickerAfterEEW(maxInt) {
             // 既にテロップが表示中で、アニメーションが動いている場合は何もしない（552が既に到着している可能性）
             if (quakeTickerArea.style.display !== 'none' && tickerContent.style.animationPlayState === 'running') {
                 console.log("EEW終了時: テロップは既に表示中（P2P 552データを受信済み）のため、汎用テロップはスキップします。");
                 return;
             }
             
+            // 🚨 修正: 震度に応じてメッセージを変更
+            const shakeDescription = maxInt >= 45 ? '強い揺れ' : '揺れ';
             // 汎用テロップメッセージを生成
             const time = new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'});
-            const genericMessage = `🚨【地震発生】${time}頃、強い揺れを観測しました。地震の詳細情報は続報をお待ちください。 🚨`;
+            const genericMessage = `🚨【地震発生】${time}頃、${shakeDescription}を観測しました。地震の詳細情報は続報をお待ちください。 🚨`;
 
             // showQuakeTicker に汎用メッセージを渡す (P2Pデータ構造の代わりにrawMessageを保持するオブジェクトとして渡す)
             showQuakeTicker({ rawMessage: genericMessage });
@@ -1221,21 +1223,21 @@
         let activeAlertTimers = {}; // EEWシリアル番号とタイマーIDを保持
 
         /** 警告のタイマーを設定する (EEW/津波) */
-        function setupAlertTimer(element, code, serial) {
+        function setupAlertTimer(element, dataType, serial, maxInt) {
             // 既存タイマーがあればクリア
             if (activeAlertTimers[serial]) {
                 clearTimeout(activeAlertTimers[serial]);
                 delete activeAlertTimers[serial];
             }
 
-            const duration = CURRENT_SETTINGS.eewDuration; // EEW/津波表示時間
+            const duration = CURRENT_SETTINGS.eewDuration;
 
             if (duration > 0) {
                 const timer = setTimeout(() => {
                     // アラートが消えるタイミングで後続処理を実行
-                    if (code === 551) {
-                        scheduleQuakeTickerAfterEEW();
-                    } else if (code === 556) {
+                    if (dataType === 'EEW') { // 🚨 修正: 震度情報を渡す
+                        scheduleQuakeTickerAfterEEW(maxInt);
+                    } else if (dataType === 'TsunamiInfo') {
                         // 津波アラートが消えたら、詳細テロップを開始
                         showTsunamiTicker();
                     }
@@ -1252,6 +1254,22 @@
          * @param {Object} data - P2P Quakeの552データ、または{ rawMessage: string }を持つオブジェクト
          */
         function showQuakeTicker(data) {
+            let wasTsunamiTickerActive = false;
+            // 既に何らかのテロップが表示中の場合、それをキャンセルして新しい情報で上書きする
+            if (quakeTickerArea.style.display === 'flex') {
+                console.log('表示中のテロップをキャンセルし、新しい地震情報に更新します。');
+                
+                // 津波テロップが表示されている可能性も考慮し、状態とスタイルをリセットする
+                if (activeTsunamiInfo) {
+                    wasTsunamiTickerActive = true;
+                    hideTsunamiTicker();
+                }
+
+                // アニメーションを強制的にリセット
+                tickerContent.style.animationName = 'none';
+                void tickerContent.offsetWidth; // DOMの再描画を強制
+            }
+
             // 🚨 修正: 汎用メッセージでない場合、最低震度をチェックする
             if (!data.rawMessage) {
                 const maxInt = data.earthquake?.maxScale || 0;
@@ -1262,7 +1280,7 @@
             }
 
             // 津波警報が発令中の場合は、地震情報テロップを表示しない
-            if (activeTsunamiInfo) {
+            if (activeTsunamiInfo && !wasTsunamiTickerActive) {
                 console.log('津波警報が有効なため、地震情報テロップの表示をスキップしました。');
                 return;
             }
@@ -1316,6 +1334,7 @@
             
             // アニメーションの継続時間と再生状態を設定
             tickerContent.style.animationDuration = `${totalDuration}s`;
+            tickerContent.style.animationIterationCount = '2'; // 2回ループ表示
             tickerContent.style.animationName = 'ticker-scroll'; // アニメーションを再適用
             tickerContent.style.animationPlayState = 'running';
 
@@ -1698,12 +1717,16 @@
         /** EEWアラート要素のコンテンツを更新する (551 続報用) */
         function updateAlertElementContent(element, data) {
             const maxInt = data.earthquake?.maxScale || 0;
-            const maxIntText = intensityToJma(maxInt);
             const serial = data.issue?.serial;
+            const dataType = getDataType(data); // 🚨 修正: dataTypeを取得
             
             // 震源地とマグニチュードの情報（欠損時は「調査中」）
             const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+            const maxIntText = intensityToJma(maxInt);
             const magnitude = data.earthquake?.magnitude || '調査中';
+            
+            // 🚨 修正: 震度に応じた警告文言
+            const warningText = maxInt >= 45 ? '強い揺れに警戒' : '今後の情報に注意';
 
             // HTML更新ロジック
             element.className = 'eew-alert'; 
@@ -1711,26 +1734,29 @@
             else if (maxInt >= 45) { element.className += ' intensity-5-up'; } 
             else if (maxInt >= 30) { element.className += ' intensity-3-up'; }
 
-            element.querySelector('.text-xl.mt-1').textContent = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（続報）`;
-            element.querySelector('.text-lg.mt-1').textContent = `震源地: ${epicenterName} | 予想最大震度: ${maxIntText} (${magnitude}M)`;
+            // 🚨 修正: 震度4以下のコンパクト表示の場合、更新対象の要素が存在しない可能性があるため、nullチェックを追加
+            const titleElement = element.querySelector('.text-xl.mt-1');
+            if (titleElement) titleElement.textContent = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${warningText}（続報）`;
+            const detailElement = element.querySelector('.text-lg.mt-1');
+            if (detailElement) detailElement.textContent = `震源地: ${epicenterName} | M${magnitude} | 予想最大震度: ${maxIntText}`;
             element.querySelector('.intensity-label').textContent = maxIntText;
             
             // 続報でもアラームを鳴らす
-            if (data.code === 551) {
+            if (dataType === 'EEW') {
                 playAlarmForIntensity(maxInt);
             }
             
-            setupAlertTimer(element, code, serial);
+            setupAlertTimer(element, dataType, serial, maxInt);
         }
 
         /** EEW/津波のアラート要素を新規作成する (551/556 新規用) */
         function createAlertElement(data) {
-            const code = data.code;
+            const dataType = getDataType(data); // 🚨 修正: データタイプを再判定
             const maxInt = data.earthquake?.maxScale || 0;
             const serial = data.issue?.serial || `alert-${Date.now()}`;
 
             // 🚨 修正: 震度5弱以上は強制表示。それ未満は設定に従う
-            if (code === 551 && maxInt < 45 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
+            if (dataType === 'EEW' && maxInt < 45 && maxInt < CURRENT_SETTINGS.minIntensityScale) {
                 const minIntensityLabel = intensityToJma(CURRENT_SETTINGS.minIntensityScale);
                 console.log(`EEW受信: 最大震度 ${intensityToJma(maxInt)}。設定された最低震度「${minIntensityLabel}」未満のため、アラート表示をスキップしました。`);
                 return; // ここで処理を終了
@@ -1743,28 +1769,65 @@
             let alertTypeTitle = '';
             let intensityUnitText = '最大震度';
             let intensityDisplayHtml = ''; // 震度またはアイコンを表示する部分
+            let newAlertHtml = ''; // 🚨 修正: アラートのHTMLを構築するための変数を追加
 
-            if (code === 551) { // 緊急地震速報 (EEW)
-                titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${data.issue.type === 'Alert' ? '強い揺れに警戒' : '揺れに注意'}（新規）`;
+            if (dataType === 'EEW') { // 緊急地震速報 (EEW)
+                // 🚨 修正: 震度に応じた警告文言
+                const warningText = maxInt >= 45 ? '強い揺れに警戒' : '今後の情報に注意';
+                titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${warningText}（新規）`;
                 // 震源地とマグニチュードの情報（欠損時は「調査中」）
                 const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
                 const magnitude = data.earthquake?.magnitude || '調査中';
-                detailText = `震源地: ${epicenterName} | 予想最大震度: ${maxIntText} (${magnitude}M)`;
+                const areasText = data.areas?.map(a => a.name).join(' ') || '';
+                detailText = `震源地: ${epicenterName} | M${magnitude} | 予想最大震度: ${maxIntText}`;
+                if (areasText) {
+                    detailText += `<br>対象地域: ${areasText}`;
+                }
 
-                alertTypeTitle = '緊急地震速報';
-                intensityDisplayHtml = `<p class="intensity-unit">最大震度</p><p class="intensity-label">${maxIntText}</p>`;
-                
-                if (maxInt >= 55) { baseClass += ' intensity-6-up'; } 
-                else if (maxInt >= 45) { baseClass += ' intensity-5-up'; } 
-                else if (maxInt >= 30) { baseClass += ' intensity-3-up'; }
-                
-                // 新規EEW発生時にアラーム音を鳴らす
-                playAlarmForIntensity(maxInt);
+                // 🚨 修正: 震度に応じてアラートのデザインを切り替える
+                if (maxInt < 45) { // 震度4以下の場合: 2行コンパクトデザイン
+                    // 🚨 修正: 震度4と3以下でラベルを切り替える
+                    const detailMessage = maxInt === 40 ? 'やや強い地震' : '地震情報';
 
-            } else if (code === 556) { // 津波情報
-                // 修正: issue.text がなくても areas から詳細テキストを生成する
+                    baseClass += ' intensity-3-up p-3';
+                    newAlertHtml = `
+                        <div class="flex flex-col gap-1 text-white">
+                            <div class="flex items-center justify-between">
+                                <p class="font-bold text-2xl bg-orange-700 px-2 py-1 rounded">地震速報</p>
+                                <div class="flex items-baseline gap-2">
+                                    <span class="text-xl font-semibold">最大震度</span>
+                                    <span class="text-5xl font-extrabold">${maxIntText}</span>
+                                </div>
+                            </div>
+                            <div class="text-base font-semibold pt-1 border-t border-white/30">
+                                <span>震源: ${epicenterName}</span>
+                            </div>
+                        </div>
+                    `;
+                } else { // 震度5弱以上の場合: 従来のデザイン
+                    alertTypeTitle = '緊急地震速報';
+                    intensityDisplayHtml = `<p class="intensity-unit">最大震度</p><p class="intensity-label">${maxIntText}</p>`;
+                    
+                    if (maxInt >= 55) { baseClass += ' intensity-6-up'; } 
+                    else if (maxInt >= 45) { baseClass += ' intensity-5-up'; }
+
+                    newAlertHtml = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex flex-col">
+                                <p class="text-3xl font-bold">${alertTypeTitle}</p>
+                                <p class="text-xl mt-1">${titleText}</p>
+                                <p class="text-lg mt-1">${detailText}</p>
+                            </div>
+                            <div class="flex flex-col items-center ml-4">${intensityDisplayHtml}</div>
+                        </div>
+                    `;
+                }
+                playAlarmForIntensity(maxInt); // アラーム音は共通で鳴らす
+
+            } else if (dataType === 'TsunamiInfo') { // 津波情報
+                // 🚨 修正: 上部アラートに対象地域を表示する
                 const areasText = data.areas?.map(a => a.name).join('、') || '';
-                detailText = data.issue?.text || (areasText ? `${areasText}に津波警報・注意報` : '詳細を確認してください');
+                detailText = areasText ? `対象地域: ${areasText}` : '詳細は画面下部のテロップを確認してください。';
 
                 let warningComment = ''; // 注意喚起コメント用の変数を追加
                 let textColorClass = 'text-white'; // 文字色のデフォルトは白
@@ -1806,43 +1869,58 @@
                 }
                 titleText = warningComment; // 小さい方のタイトルを注意喚起コメントに置き換え
                 baseClass += ` animation-none ${textColorClass}`; // アニメーションなしと文字色クラスを追加
-                // 指定された画像URLをアイコンとして表示
                 intensityDisplayHtml = `<div class="w-24 h-24"><img src="https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/blob/main/TsunamiHazardSign.svg.png?raw=true" alt="津波アイコン" class="w-full h-full object-contain"></div>`;
+                newAlertHtml = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <p class="text-3xl font-bold">${alertTypeTitle}</p>
+                            <p class="text-xl mt-1">${titleText}</p>
+                            <p class="text-lg mt-1">${detailText}</p>
+                        </div>
+                        <div class="flex flex-col items-center ml-4">${intensityDisplayHtml}</div>
+                    </div>
+                `;
             } else {
                 return;
             }
             
             const newAlert = document.createElement('div');
-            if (code === 551) {
+            if (dataType === 'EEW') {
                 newAlert.setAttribute('data-eew-serial', serial);
-            } else if (code === 556) {
+            } else if (dataType === 'TsunamiInfo') {
                 newAlert.setAttribute('data-alert-type', 'tsunami'); // 津波アラート用の属性を追加
             }
             newAlert.id = `alert-${serial}`;
             newAlert.className = `${baseClass}`; 
-            newAlert.innerHTML = `
-                <div class="flex items-center justify-between">
-                    <div class="flex flex-col">
-                        <p class="text-3xl font-bold">${alertTypeTitle}</p>
-                        <p class="text-xl mt-1">${titleText}</p>
-                        <p class="text-lg mt-1">${detailText}</p>
-                    </div>
-                    <div class="flex flex-col items-center ml-4">
-                        ${intensityDisplayHtml}
-                    </div>
-                </div>
-            `;
+            newAlert.innerHTML = newAlertHtml;
 
             eewContainer.prepend(newAlert);
-            setupAlertTimer(newAlert, code, serial);
+            setupAlertTimer(newAlert, dataType, serial, maxInt);
+        }
+
+        /** データ構造からEEW, 地震情報, 津波情報のいずれかを判定する */
+        function getDataType(data) {
+            if (data.earthquake && data.earthquake.hypocenter && data.issue?.serial) {
+                return 'EEW'; // シリアル番号付きの地震情報 -> EEW
+            } else if (data.earthquake && data.earthquake.hypocenter) {
+                return 'QuakeInfo'; // シリアル番号なしの地震情報 -> 地震情報テロップ
+            } else if (data.areas && data.areas.some(a => a.grade)) {
+                return 'TsunamiInfo'; // 'grade'を持つareasがある -> 津波情報
+            } else if (data.cancelled === true || data.issue?.text?.includes('解除')) {
+                return 'TsunamiInfo'; // 解除報
+            }
+            return 'Unknown';
         }
 
         /** P2P Quakeから受信したデータのエントリーポイント */
         function processAlertData(data) {
-            const code = data.code;
-            const serial = data.issue?.serial;
+            const dataType = getDataType(data);
+
+            if (dataType === 'Unknown') {
+                console.log(`処理対象外のデータを受信しました (code: ${data.code})。スキップします。`, data);
+                return;
+            }
             
-            // 履歴用の情報を先に準備
             const historyItem = {
                 time: data.time || new Date().toISOString(),
                 // 修正: issue.textが存在すれば、それを優先的にepicenterとして使用する
@@ -1854,37 +1932,37 @@
                 type: 'Unknown'
             };
 
-            if (code === 551 && serial) { // EEW (緊急地震速報)
+            if (dataType === 'EEW') {
                 historyItem.type = 'EEW';
+                const serial = data.issue.serial;
                 const existingElement = document.querySelector(`[data-eew-serial="${serial}"]`);
                 if (existingElement) {
                     // 続報として既存のアラートを更新
+                    console.log(`EEW続報を処理します (serial: ${serial})`);
                     historyItem.displayed = true; // 続報は必ず表示される
                     updateAlertElementContent(existingElement, data);
+                    // 🚨 修正: 続報受信時にテロップも強制的に更新する
+                    console.log('EEW続報により、地震情報テロップを最新情報に更新します。');
+                    showQuakeTicker(data);
                 } else {
                     // 新規アラートとして作成
                     createAlertElement(data);
                 }
-            } else if (code === 552 || (code === 551 && !serial)) { // 地震情報、またはシリアル番号のないEEW
+            } else if (dataType === 'QuakeInfo') {
                 // 🚨 修正: ここでの直接呼び出しは震度チェックを showQuakeTicker 関数内で行う
                 const maxInt = data.earthquake?.maxScale || 0;
                 if (maxInt >= CURRENT_SETTINGS.minIntensityScaleTicker) {
                     showQuakeTicker(data);
                     historyItem.displayed = true;
-
-                    if (code === 551) {
-                        historyItem.type = 'EEW';
-                        console.log('シリアル番号のないEEWをテロップとして表示します。');
-                    } else {
-                        historyItem.type = 'QuakeInfo';
-                    }
+                    historyItem.type = 'QuakeInfo';
                 } else {
                     historyItem.displayed = false;
                     console.log(`地震情報テロップの表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScaleTicker)} 未満です。`);
                 }
                 
-            } else if (code === 556) { // 津波予報
+            } else if (dataType === 'TsunamiInfo') {
                 historyItem.type = 'TsunamiInfo';
+                historyItem.epicenter = data.issue?.text || data.areas?.map(a => a.name).join('、') || '津波情報';
                 const text = data.issue?.text || '';
                 const isCancelled = text.includes('解除');
 
@@ -1899,29 +1977,90 @@
                     (text.includes('大津波警報') || text.includes('津波警報') || text.includes('津波注意報'))
                 );
 
-                // 詳細テロップ用の情報を作成
-                let detailTickerText = '';
-                if (data.areas && data.areas.length > 0) {
-                    detailTickerText = data.areas.map(area => {
-                        let heightText = '';
-                        if (area.maxHeight) {
-                            if (area.maxHeight.value) {
-                                heightText = `予想高さ ${area.maxHeight.value}m`;
-                            } else if (area.maxHeight.condition) {
-                                heightText = `予想 ${area.maxHeight.condition}`;
-                            }
+                /**
+                 * 🌊 津波テロップ用の詳細メッセージを生成する 🌊
+                 * @param {Object} data - P2P 556データ
+                 * @returns {string} 生成されたテロップメッセージ
+                 */
+                function createTsunamiTickerMessage(data) {
+                    if (!data.areas || data.areas.length === 0) {
+                        return data.issue?.text || '津波に関する情報が発表されました。';
+                    }
+
+                    // 警報レベルごとに地域をグループ化
+                    const groupedAreas = {
+                        MajorWarning: [],
+                        Warning: [],
+                        Watch: []
+                    };
+                    data.areas.forEach(area => {
+                        if (groupedAreas[area.grade]) {
+                            groupedAreas[area.grade].push(area);
                         }
-                        let timeText = '';
-                        if (area.firstHeight) {
-                            if (area.firstHeight.time) {
-                                const arrivalTime = new Date(area.firstHeight.time);
-                                timeText = `到達 ${arrivalTime.getHours()}時${arrivalTime.getMinutes()}分`;
-                            } else if (area.firstHeight.condition) {
-                                timeText = area.firstHeight.condition;
-                            }
+                    });
+
+                    // 最も高い警報レベルを決定
+                    const hasMajorWarning = data.areas.some(a => a.grade === 'MajorWarning');
+                    const hasWarning = data.areas.some(a => a.grade === 'Warning');
+
+                    let highestGradeText = '津波注意報';
+                    let highestCallToAction = '海岸に近づかないでください';
+                    let highestGradeAreas = groupedAreas.Watch;
+
+                    if (hasMajorWarning) {
+                        highestGradeText = '大津波警報';
+                        highestCallToAction = 'ただちに高台へ避難してください';
+                        highestGradeAreas = groupedAreas.MajorWarning;
+                    } else if (hasWarning) {
+                        highestGradeText = '津波警報';
+                        highestCallToAction = '海岸から離れてください';
+                        highestGradeAreas = groupedAreas.Warning;
+                    }
+
+                    // メインメッセージの生成 (最高レベルの警報対象地域)
+                    const mainAreasText = highestGradeAreas.map(a => a.name).join(' ');
+                    const mainMessage = `【${highestGradeText}】 ${mainAreasText} に ${highestGradeText}が発表されました ${highestCallToAction}`;
+
+                    // 詳細情報の生成 (警報レベルごと)
+                    const gradeOrder = ['MajorWarning', 'Warning', 'Watch'];
+                    const gradeLabels = { MajorWarning: '大津波警報', Warning: '津波警報', Watch: '津波注意報' };
+                    let detailsMessage = '';
+                    let hasAnyDetails = false; // 🚨 修正: いずれかの地域に詳細情報があるかを追跡するフラグ
+
+                    gradeOrder.forEach(grade => {
+                        if (groupedAreas[grade].length > 0) {
+                            const areasDetailsText = groupedAreas[grade].map(area => {
+                                let subDetails = [];
+                                // 🚨 修正: 詳細情報があればフラグを立てる
+                                if (area.firstHeight) {
+                                    if (area.firstHeight.time) {
+                                        const arrivalTime = new Date(area.firstHeight.time);
+                                        subDetails.push(`到達 ${arrivalTime.getHours()}時${arrivalTime.getMinutes()}分`);
+                                    } else if (area.firstHeight.condition) {
+                                        subDetails.push(area.firstHeight.condition);
+                                    }
+                                    if (subDetails.length > 0) hasAnyDetails = true;
+                                }
+                                if (area.maxHeight) {
+                                    if (area.maxHeight.value) {
+                                        subDetails.push(`予想高さ ${area.maxHeight.value}m`);
+                                    } else if (area.maxHeight.condition) {
+                                        subDetails.push(`予想高さ ${area.maxHeight.condition}`);
+                                    }
+                                    if (subDetails.length > 0 && !hasAnyDetails) hasAnyDetails = true;
+                                }
+                                return `${area.name}${subDetails.length > 0 ? `(${subDetails.join(' ')})` : ''}`;
+                            }).join(' ');
+                            detailsMessage += ` 【${gradeLabels[grade]}】 ${areasDetailsText}`;
                         }
-                        return `${area.name} ${timeText} ${heightText}`;
-                    }).join(' | ');
+                    });
+
+                    // 🚨 修正: 詳細情報がある場合のみ「到達予想時間と高さ」セクションを追加
+                    if (detailsMessage && hasAnyDetails) {
+                        return `${mainMessage}　　到達予想時間と高さ ${detailsMessage}`;
+                    }
+
+                    return mainMessage;
                 }
 
                 if (isCancelled) {
@@ -1933,7 +2072,7 @@
                     historyItem.displayed = true; // 解除も重要な情報なので表示扱い
                 } else if (isWarning) {
                     // 警報・注意報を受信したら、上部アラートとして表示
-                    activeTsunamiInfo = detailTickerText || text; // 詳細情報があればそれを、なければ元のテキストをテロップ用に保持
+                    activeTsunamiInfo = createTsunamiTickerMessage(data); // 新しい関数でメッセージを生成
                     createAlertElement(data);
                     historyItem.displayed = true;
                 } else {
@@ -1942,7 +2081,7 @@
             }
 
             // 表示判定ロジック (createAlertElement内で行われるため、ここで再判定)
-            if (code === 551) {
+            if (dataType === 'EEW' && historyItem.maxInt) {
                 if (historyItem.maxInt >= 45 || historyItem.maxInt >= CURRENT_SETTINGS.minIntensityScale) {
                     historyItem.displayed = true;
                 }
@@ -2013,43 +2152,55 @@
         const TEST_EEW_SERIAL_A = "TEST-EEW-SERIAL-001";
         
         const TEST_DATA = {
+            // 🚨 修正: EEWのテストデータを、より現実的な形式に修正
             'eew_5weak_a': {
                 "code": 551, "issue": {"source": "試験用A", "time": new Date().toISOString(), "type": "Alert", "serial": TEST_EEW_SERIAL_A},
                 "earthquake": {
-                    "time": new Date().toISOString(), "hypocenter": {"name": "地震A (震度5弱)", "depth": 10},
+                    "time": new Date().toISOString(), "hypocenter": {"name": "能登半島沖", "depth": 10},
                     "maxScale": 45, "magnitude": 6.2
-                }, "isTest": true
+                },
+                "areas": [
+                    { "pref": "石川県", "name": "石川県能登", "scaleFrom": 45, "scaleTo": 45, "kindCode": "10" }
+                ],
+                "isTest": true
             },
             'eew_6strong_a': {
                 "code": 551, "issue": {"source": "試験用A", "time": new Date().toISOString(), "type": "Alert", "serial": TEST_EEW_SERIAL_A},
                 "earthquake": {
-                    "time": new Date().toISOString(), "hypocenter": {"name": "地震A (震度6強) [更新]", "depth": 10},
+                    "time": new Date().toISOString(), "hypocenter": {"name": "能登半島沖", "depth": 10},
                     "maxScale": 60, "magnitude": 7.5
-                }, "isTest": true
+                },
+                "areas": [
+                    { "pref": "石川県", "name": "石川県能登", "scaleFrom": 60, "scaleTo": 60, "kindCode": "11" },
+                    { "pref": "新潟県", "name": "新潟県上越", "scaleFrom": 40, "scaleTo": 40, "kindCode": "10" }
+                ],
+                "isTest": true
             },
+            // 🚨 修正: 地震情報(震度速報)のテストデータを、より現実的な形式に修正
             'quake_3': {
-                "code": 552, "issue": {"source": "試験用", "time": new Date().toISOString(), "type": "Detail", "serial": `TEST-QUAKE-SERIAL-${Date.now()}`},
+                "code": 551, "issue": {"source": "試験用", "time": new Date().toISOString(), "type": "DetailScale"},
                 "earthquake": {
-                    // テストデータには、句読点が含まれるようにしています。
-                    "time": new Date().toISOString(), "hypocenter": {"name": "千葉県東方沖で大きな地震が発生しました。マグニチュードは6.5と推定されています。津波の心配はありません。", "depth": 30},
+                    "time": new Date().toISOString(), "hypocenter": {"name": "千葉県東方沖", "depth": 30},
                     "maxScale": 30, "magnitude": 5.0
                 }, "isTest": true
             },
             'tsunami_advisory': {
-                "code": 556, "issue": {
-                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`
-                },
+                "code": 556,
                 "areas": [
                     {"grade": "Watch", "immediate": false, "name": "岩手県"},
                     {"grade": "Watch", "immediate": false, "name": "宮城県"}
                 ],
-                "issue": { "text": "岩手県、宮城県に津波注意報を発表しました。"},
+                "issue": {
+                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`,
+                    "text": "岩手県、宮城県に津波注意報を発表しました。"
+                },
                 "isTest": true
             },
             'tsunami_major_warning': {
                 "code": 556, "issue": {
-                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`
-                , "text": "沖縄県に大津波警報が発表されました。ただちに高台に避難してください。"},
+                    "source": "試験用", "time": new Date().toISOString(), "type": "Tsunami", "serial": `TEST-TSUNAMI-${Date.now()}`,
+                    "text": "沖縄県に大津波警報が発表されました。ただちに高台に避難してください。"
+                },
                 "areas": [
                     {"grade": "MajorWarning", "immediate": true, "name": "沖縄本島地方"},
                     {"grade": "MajorWarning", "immediate": true, "name": "宮古島・八重山地方"}
