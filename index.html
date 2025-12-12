@@ -1033,6 +1033,29 @@
             initializeAudioContext();
         }
 
+        /**
+         * 🔊🖼️ アセット（音声・画像）をプリロードする
+         */
+        function preloadAssets() {
+            console.log('アセットのプリロードを開始します...');
+
+            // 1. 音声ファイルのプリロード
+            // 現在の設定（デフォルト値を含む）に基づいて、すべてのURL音源の読み込みを開始します。
+            loadAllCustomUrls();
+
+            // 2. 画像ファイルのプリロード
+            // 津波警報アイコンを事前に読み込んでキャッシュさせます。
+            const tsunamiIconUrl = 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/blob/main/TsunamiHazardSign.svg.png?raw=true';
+            const tsunamiIcon = new Image();
+            tsunamiIcon.src = tsunamiIconUrl;
+            tsunamiIcon.onload = () => {
+                console.log('津波アイコン画像のプリロードが完了しました。');
+            };
+            tsunamiIcon.onerror = () => {
+                console.error('津波アイコン画像のプリロードに失敗しました。');
+            };
+        }
+
         /** 履歴リストをUIに描画する */
         function renderHistoryList() {
             historyListEl.innerHTML = ''; // リストをクリア
@@ -2229,8 +2252,9 @@
         // ----------------------------------------------------
         window.onload = () => {
             setupApp(); // UIとAudioContextの初期化
-            loadSettingsFromLocalStorage(); // LocalStorageから設定をロード
+            loadSettingsFromLocalStorage(); // LocalStorageから設定をロード (この中で音声ロードが呼ばれる)
             loadHistoryFromLocalStorage(); // LocalStorageから履歴をロード
+            preloadAssets(); // 🚨 画像と音声アセットのプリロードを実行
             connectWebSocket(); // WebSocket接続を開始
             
             loadStatusEl.classList.remove('hidden');
