@@ -600,9 +600,9 @@
             
             // 🚨 震度別アラーム音設定のデフォルト
             eewSoundMap: {
-                int4_down: 'classic_eew',
-                int5_mid: 'urgent_siren', 
-                int6_up: 'urgent_siren'    
+                int4_down: 'classic_eew', // 震度4以下
+                int5_mid: 'custom_url_a', // 震度5弱・5強
+                int6_up: 'custom_url_a'     // 震度6弱以上
             },
             
             // 🌊 津波関連アラーム音設定のデフォルト
@@ -615,9 +615,9 @@
 
             // 🌊 津波関連の専用音源URL設定のデフォルト 🌊
             tsunamiSoundUrls: {
-                major: '', // 例: 'https://example.com/major_warning.mp3'
-                warning: '', // 例: 'https://example.com/warning.mp3'
-                advisory: '', // 例: 'https://example.com/advisory.mp3'
+                major: 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/raw/refs/heads/main/Tsunami_Major%20tsunami%20warning.aac', // 例: 'https://example.com/major_warning.mp3'
+                warning: 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/raw/refs/heads/main/Tsunami_Tsunami%20warning.aac', // 例: 'https://example.com/warning.mp3'
+                advisory: 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/raw/refs/heads/main/Tsunami_Tsunami%20advisory.aac', // 例: 'https://example.com/advisory.mp3'
                 cancelled: '' // 例: 'https://example.com/cancelled.mp3'
             },
 
@@ -636,8 +636,8 @@
             },
             // 🔊 カスタムURL音源 🔊
             customUrls: {
-                custom_url_a: '',
-                custom_url_b: '',
+                custom_url_a: 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/raw/refs/heads/main/EEW_Woman_2.aac',
+                custom_url_b: 'https://github.com/AfterEffects-OK/EarthquakeEarlyWarning/raw/refs/heads/main/EEW_Man.aac',
             },
             
             // UIの折りたたみ状態のデフォルト
