@@ -1513,13 +1513,15 @@
          */
         function playAlarmForIntensity(maxInt) {
             
-            // 震度に応じてどの設定を使うか決定
-            let soundKey = 'int4_down'; 
-            if (maxInt >= 55) { 
+            // 🚨 修正: 震度が高い方から順番に評価するように修正
+            let soundKey;
+            if (maxInt >= 55) { // 震度6弱以上
                 soundKey = 'int6_up';
-            } else if (maxInt >= 45) { 
+            } else if (maxInt >= 45) { // 震度5弱・5強
                 soundKey = 'int5_mid';
-            } 
+            } else { // それ以外 (震度4以下)
+                soundKey = 'int4_down';
+            }
             
             const alarmType = CURRENT_SETTINGS.eewSoundMap[soundKey] || 'classic_eew';
             
