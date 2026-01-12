@@ -1066,6 +1066,7 @@
                 
                 // 発生日時を年月日時分秒で表示
                 const timeStr = new Date(item.time).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const timeLabel = item.timeLabel || (['EEW', 'QuakeInfo'].includes(item.type) ? '発生' : '受信');
                 const displayStatus = item.displayed ? '表示' : 'スキップ';
                 
                 let infoText = '';
@@ -1076,11 +1077,14 @@
                 } else if (item.type === 'TsunamiInfo') {
                     // 津波情報の場合も内容を表示
                     infoText = `[津波情報] ${item.epicenter}`; // epicenterにテキストが入っている
+                } else {
+                    // その他の場合（Unknownなど）も内容を表示するように変更
+                    infoText = `[その他] 震度: ${item.maxIntText} | 震源: ${item.epicenter}`;
                 }
 
                 li.innerHTML = `
                     <div class="flex justify-between items-center text-white">
-                        <span class="font-semibold">${timeStr}</span>
+                        <span class="font-semibold">${timeStr}${timeLabel}</span>
                         <span class="font-bold text-xs px-1.5 py-0.5 rounded ${item.displayed ? 'bg-green-600' : 'bg-yellow-600'}">${displayStatus}</span>
                     </div>
                     <p class="text-gray-300 mt-0.5">${infoText}</p>
@@ -1317,8 +1321,10 @@
                 // P2P 552データが渡された場合（通常 - processAlertDataから）
                 const time = new Date(data.earthquake.time || Date.now()).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'});
                 const maxIntText = intensityToJma(data.earthquake?.maxScale || 0);
-                const epicenter = data.earthquake.hypocenter?.name || '不明';
-                const magnitude = data.earthquake?.magnitude || '不明';
+                let epicenter = data.earthquake.hypocenter?.name || '調査中';
+                if (epicenter === '不明') epicenter = '調査中';
+                let magnitude = data.earthquake?.magnitude || '不明';
+                if (magnitude === -1) magnitude = '調査中';
                 const depth = data.earthquake.hypocenter?.depth ? `${data.earthquake.hypocenter.depth}km` : '不明';
 
                 rawMessage = `🚨【地震情報】${time}頃発生 | 震源地: ${epicenter} (震源の深さ: ${depth}) | 地震の規模(M): ${magnitude} | 最大震度: ${maxIntText} 🚨`;
@@ -1746,9 +1752,11 @@
             const dataType = getDataType(data); // 🚨 修正: dataTypeを取得
             
             // 震源地とマグニチュードの情報（欠損時は「調査中」）
-            const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+            let epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+            if (epicenterName === '不明') epicenterName = '調査中';
             const maxIntText = intensityToJma(maxInt);
-            const magnitude = data.earthquake?.magnitude || '調査中';
+            let magnitude = data.earthquake?.magnitude || '調査中';
+            if (magnitude === -1) magnitude = '調査中';
             
             // 🚨 修正: 震度に応じた警告文言
             const warningText = maxInt >= 45 ? '強い揺れに警戒' : '今後の情報に注意';
@@ -1801,8 +1809,10 @@
                 const warningText = maxInt >= 45 ? '強い揺れに警戒' : '今後の情報に注意';
                 titleText = `【${data.issue.type === 'Alert' ? '警報' : '予報'}】${warningText}（新規）`;
                 // 震源地とマグニチュードの情報（欠損時は「調査中」）
-                const epicenterName = data.earthquake?.hypocenter?.name || '調査中';
-                const magnitude = data.earthquake?.magnitude || '調査中';
+                let epicenterName = data.earthquake?.hypocenter?.name || '調査中';
+                if (epicenterName === '不明') epicenterName = '調査中';
+                let magnitude = data.earthquake?.magnitude || '調査中';
+                if (magnitude === -1) magnitude = '調査中';
                 const areasText = data.areas?.map(a => a.name).join(' ') || '';
                 detailText = `震源地: ${epicenterName} | M${magnitude} | 予想最大震度: ${maxIntText}`;
                 if (areasText) {
@@ -1946,11 +1956,22 @@
                 return;
             }
             
+            let epicenterText = data.issue?.text || data.earthquake?.hypocenter?.name || '調査中';
+            if (epicenterText === '不明') epicenterText = '調査中';
+
+            let displayTime = data.time || new Date().toISOString();
+            let timeLabel = '受信';
+            if (data.earthquake?.time) {
+                displayTime = data.earthquake.time;
+                timeLabel = '発生';
+            }
+
             const historyItem = {
-                time: data.time || new Date().toISOString(),
+                time: displayTime,
+                timeLabel: timeLabel,
                 // 修正: issue.textが存在すれば、それを優先的にepicenterとして使用する
                 // これにより、取消報などのテキスト情報も履歴に残る
-                epicenter: data.issue?.text || data.earthquake?.hypocenter?.name || '不明',
+                epicenter: epicenterText,
                 maxInt: data.earthquake?.maxScale || 0,
                 maxIntText: intensityToJma(data.earthquake?.maxScale || 0),
                 displayed: false, // デフォルトは非表示
@@ -1974,12 +1995,12 @@
                     createAlertElement(data);
                 }
             } else if (dataType === 'QuakeInfo') {
+                historyItem.type = 'QuakeInfo';
                 // 🚨 修正: ここでの直接呼び出しは震度チェックを showQuakeTicker 関数内で行う
                 const maxInt = data.earthquake?.maxScale || 0;
                 if (maxInt >= CURRENT_SETTINGS.minIntensityScaleTicker) {
                     showQuakeTicker(data);
                     historyItem.displayed = true;
-                    historyItem.type = 'QuakeInfo';
                 } else {
                     historyItem.displayed = false;
                     console.log(`地震情報テロップの表示をスキップしました。最大震度 ${intensityToJma(maxInt)} が設定された最低震度 ${intensityToJma(CURRENT_SETTINGS.minIntensityScaleTicker)} 未満です。`);
