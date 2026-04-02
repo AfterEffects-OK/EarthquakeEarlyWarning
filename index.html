@@ -1325,10 +1325,11 @@
                 if (epicenter === '不明') epicenter = '調査中';
                 let magnitude = data.earthquake?.magnitude || '不明';
                 if (magnitude === -1) magnitude = '調査中';
+                const magnitudeText = (magnitude === '調査中' || magnitude === '不明') ? magnitude : `マグニチュード ${magnitude}`;
                 let depth = data.earthquake.hypocenter?.depth;
                 depth = (depth === -1 || depth === undefined || depth === null) ? '調査中' : `${depth}km`;
 
-                rawMessage = `【地震情報】${time}ごろ地震がありました　 震源: ${epicenter} (震源の深さ: ${depth} 　 地震の規模: マグニチュード ${magnitude}) 　 最大震度: ${maxIntText} `;
+                rawMessage = `【地震情報】${time}ごろ地震がありました　 震源: ${epicenter} (震源の深さ: ${depth} 　 地震の規模: ${magnitudeText}) 　 最大震度: ${maxIntText} `;
             }
             
             const secondsPerScreen = CURRENT_SETTINGS.quakeDuration; // 画面幅をスクロールするのにかかる時間
